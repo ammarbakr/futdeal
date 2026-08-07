@@ -263,7 +263,14 @@ export function showToast(message, type = "info") {
   const toast = document.createElement("div");
   toast.id = "toast";
   toast.className = `toast toast--${type}`;
-  toast.textContent = message;
+  
+  let icon = "fa-circle-info";
+  if (type === "error") icon = "fa-circle-xmark";
+  if (type === "warn") icon = "fa-triangle-exclamation";
+  if (type === "success") icon = "fa-circle-check";
+  
+  toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${message}</span>`;
+  
   document.body.appendChild(toast);
   toast.offsetHeight;
   toast.classList.add("toast--visible");
@@ -363,4 +370,79 @@ export function showResultScreen(result, onPlayAgain) {
   const newBtn = oldBtn.cloneNode(true);
   oldBtn.parentNode.replaceChild(newBtn, oldBtn);
   newBtn.addEventListener("click", onPlayAgain);
+}
+
+export function showModal(message, onCancel) {
+  const modal = document.getElementById("global-modal");
+  const statusText = document.getElementById("modal-status-text");
+  const cancelBtn = document.getElementById("btn-modal-cancel");
+  const confirmBtn = document.getElementById("btn-modal-confirm");
+  const spinner = document.getElementById("modal-spinner");
+
+  if (!modal || !statusText || !cancelBtn) return;
+
+  statusText.textContent = message;
+  if (spinner) spinner.style.display = "flex";
+  if (confirmBtn) confirmBtn.classList.add("hidden");
+  
+  // Clean up old listener
+  const newCancelBtn = cancelBtn.cloneNode(true);
+  cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+  newCancelBtn.textContent = "Cancel";
+  
+  if (onCancel) {
+    newCancelBtn.style.display = "block";
+    newCancelBtn.addEventListener("click", onCancel);
+  } else {
+    newCancelBtn.style.display = "none";
+  }
+
+  modal.classList.remove("hidden");
+}
+
+export function hideModal() {
+  const modal = document.getElementById("global-modal");
+  const spinner = document.getElementById("modal-spinner");
+  if (modal) {
+    modal.classList.add("hidden");
+  }
+  if (spinner) {
+    spinner.style.display = "flex";
+  }
+}
+
+export function showConfirmModal(message, onConfirm) {
+  const modal = document.getElementById("global-modal");
+  const statusText = document.getElementById("modal-status-text");
+  const cancelBtn = document.getElementById("btn-modal-cancel");
+  const confirmBtn = document.getElementById("btn-modal-confirm");
+  const spinner = document.getElementById("modal-spinner");
+
+  if (!modal || !statusText || !cancelBtn || !confirmBtn) return;
+
+  statusText.textContent = message;
+  if (spinner) spinner.style.display = "none";
+  
+  // Clean up old listener
+  const newCancelBtn = cancelBtn.cloneNode(true);
+  cancelBtn.parentNode.replaceChild(newCancelBtn, cancelBtn);
+  newCancelBtn.style.display = "block";
+  newCancelBtn.textContent = "No";
+  newCancelBtn.addEventListener("click", () => {
+    hideModal();
+    if (spinner) spinner.style.display = "flex";
+  });
+
+  const newConfirmBtn = confirmBtn.cloneNode(true);
+  confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+  newConfirmBtn.classList.remove("hidden");
+  newConfirmBtn.style.display = "block";
+  newConfirmBtn.textContent = "Yes";
+  newConfirmBtn.addEventListener("click", () => {
+    hideModal();
+    if (spinner) spinner.style.display = "flex";
+    if (onConfirm) onConfirm();
+  });
+
+  modal.classList.remove("hidden");
 }

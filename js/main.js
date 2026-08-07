@@ -26,6 +26,9 @@ import {
   showMatchScreen,
   showResultScreen,
   showToast,
+  showModal,
+  hideModal,
+  showConfirmModal,
 } from "./ui.js";
 
 import { DRAFT_ORDER, POSITION_LABELS } from "./data.js";
@@ -47,8 +50,55 @@ let unsubscribeRoom = null;
  * Lobby UI Logic
  */
 function initLobby() {
+  const headerUsername = document.getElementById("header-username");
+  const userProfile = document.getElementById("user-profile");
+  const nicknameModal = document.getElementById("nickname-modal");
+  const btnSaveNickname = document.getElementById("btn-save-nickname");
+  const modalPlayerName = document.getElementById("modal-player-name");
+
+  let savedName = localStorage.getItem('futdeal_username');
+  if (savedName) {
+    headerUsername.textContent = savedName;
+  } else {
+    nicknameModal.classList.remove("hidden");
+  }
+
+  userProfile.addEventListener("click", () => {
+    modalPlayerName.value = localStorage.getItem('futdeal_username') || "";
+    nicknameModal.classList.remove("hidden");
+    modalPlayerName.focus();
+  });
+
+  btnSaveNickname.addEventListener("click", () => {
+    const val = modalPlayerName.value.trim();
+    if (!val) {
+      showToast("Please enter a nickname", "warn");
+      return;
+    }
+    localStorage.setItem('futdeal_username', val);
+    headerUsername.textContent = val;
+    nicknameModal.classList.add("hidden");
+  });
+
+  document.getElementById("btn-cancel-lobby").addEventListener("click", async () => {
+    if (unsubscribeRoom) unsubscribeRoom();
+    if (currentRoomCode) await online.setStatus(currentRoomCode, 'abandoned');
+    sessionStorage.removeItem('futdeal_roomCode');
+    sessionStorage.removeItem('futdeal_playerRole');
+    window.location.reload();
+  });
+
   document.getElementById("btn-create-room").addEventListener("click", async () => {
-    const name = document.getElementById("player-name").value.trim() || "Host";
+    const name = localStorage.getItem('futdeal_username');
+    if (!name) {
+      nicknameModal.classList.remove("hidden");
+      return showToast("Enter your nickname first", "warn");
+    }
+    
+    const btnCreate = document.getElementById("btn-create-room");
+    btnCreate.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Waiting for opponent...';
+    btnCreate.style.pointerEvents = "none";
+    btnCreate.style.opacity = "0.8";
     try {
       currentRoomCode = await online.createRoom(name);
       playerRole = 'host';
@@ -60,25 +110,47 @@ function initLobby() {
       
       document.getElementById("display-code").textContent = currentRoomCode;
       document.getElementById("room-code-display").classList.remove("hidden");
-      document.getElementById("lobby-status").classList.remove("hidden");
-      document.getElementById("lobby-status-text").textContent = "Waiting for opponent...";
       
-      // Hide buttons
-      document.querySelector(".lobby-actions").style.display = "none";
-      document.querySelectorAll(".lobby-actions")[1].style.display = "none";
-      document.querySelector(".lobby-divider").style.display = "none";
-      document.getElementById("room-code-input").parentElement.style.display = "none";
+      // Hide the join section
+      document.getElementById("join-divider").style.display = "none";
+      document.getElementById("join-input-group").style.display = "none";
+      document.getElementById("btn-join-room").style.display = "none";
+      
+      document.getElementById("btn-cancel-lobby").classList.remove("hidden");
+      document.getElementById("btn-leave-room").classList.remove("hidden");
       
       startWatchingRoom();
     } catch (e) {
-      alert("Failed to create room: " + e.message);
+      showToast("Failed to create room: " + e.message, "error");
     }
+  });
+  const roomCodeInput = document.getElementById("room-code-input");
+  const btnClearCode = document.getElementById("btn-clear-code");
+
+  roomCodeInput.addEventListener("input", (e) => {
+    let val = e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase();
+    e.target.value = val;
+    if (val.length > 0) {
+      btnClearCode.classList.remove("hidden");
+    } else {
+      btnClearCode.classList.add("hidden");
+    }
+  });
+
+  btnClearCode.addEventListener("click", () => {
+    roomCodeInput.value = "";
+    btnClearCode.classList.add("hidden");
+    roomCodeInput.focus();
   });
 
   document.getElementById("btn-join-room").addEventListener("click", async () => {
     const code = document.getElementById("room-code-input").value.trim().toUpperCase();
-    const name = document.getElementById("player-name").value.trim() || "Guest";
-    if (!code) return alert("Enter room code");
+    const name = localStorage.getItem('futdeal_username');
+    if (!name) {
+      nicknameModal.classList.remove("hidden");
+      return showToast("Enter your nickname first", "warn");
+    }
+    if (!code) return showToast("Enter room code", "warn");
     
     try {
       await online.joinRoom(code, name);
@@ -90,12 +162,18 @@ function initLobby() {
       sessionStorage.setItem('futdeal_playerName', name);
       document.getElementById("score-you-name").textContent = name;
       
-      document.getElementById("lobby-status").classList.remove("hidden");
-      document.getElementById("lobby-status-text").textContent = "Joining...";
+      showModal("Joining...", () => {
+        // Cancel logic for guest
+        sessionStorage.removeItem('futdeal_roomCode');
+        sessionStorage.removeItem('futdeal_playerRole');
+        window.location.reload();
+      });
+      
+      document.getElementById("btn-leave-room").classList.remove("hidden");
       
       startWatchingRoom();
     } catch (e) {
-      alert("Failed to join room: " + e.message);
+      showToast("Failed to join room: " + e.message, "error");
     }
   });
 }
@@ -103,7 +181,22 @@ function initLobby() {
 function startWatchingRoom() {
   if (unsubscribeRoom) unsubscribeRoom();
   unsubscribeRoom = online.watchRoom(currentRoomCode, (state) => {
-    if (!state) return;
+    if (!state) {
+      if (!document.getElementById("result-board").classList.contains("hidden")) return;
+      showToast("The room was closed.", "error");
+      sessionStorage.removeItem('futdeal_roomCode');
+      sessionStorage.removeItem('futdeal_playerRole');
+      setTimeout(() => window.location.reload(), 2500);
+      return;
+    }
+    
+    if (state.status === 'abandoned') {
+      showToast("The other player has left the game.", "error");
+      sessionStorage.removeItem('futdeal_roomCode');
+      sessionStorage.removeItem('futdeal_playerRole');
+      setTimeout(() => window.location.reload(), 2500);
+      return;
+    }
     
     const prevState = roomState;
     roomState = state;
@@ -132,6 +225,7 @@ function startWatchingRoom() {
     
     // First time we transition to drafting, or if we just reconnected to an already drafting room
     if (state.status === 'drafting' && (!prevState || prevState.status === 'waiting' || (prevState && !document.getElementById("lobby-board").classList.contains("hidden")))) {
+      hideModal();
       startGame();
     }
     
@@ -434,6 +528,13 @@ function resolveMatch() {
     sessionStorage.removeItem('futdeal_playerRole');
     window.location.reload();
   });
+  
+  if (playerRole === 'host') {
+    // Delete room after 5 seconds to ensure guest receives the final state
+    setTimeout(() => {
+      online.deleteRoom(currentRoomCode);
+    }, 5000);
+  }
 }
 
 /**
@@ -494,6 +595,19 @@ document.addEventListener("DOMContentLoaded", () => {
   setupDrawer();
   initLobby();
   
+  // Setup Leave button
+  document.getElementById("btn-leave-room").addEventListener("click", () => {
+    showConfirmModal("Are you sure you want to leave the room?", async () => {
+      if (unsubscribeRoom) unsubscribeRoom();
+      if (currentRoomCode) {
+        await online.setStatus(currentRoomCode, 'abandoned');
+      }
+      sessionStorage.removeItem('futdeal_roomCode');
+      sessionStorage.removeItem('futdeal_playerRole');
+      window.location.reload();
+    });
+  });
+  
   // Try to restore session
   const savedCode = sessionStorage.getItem('futdeal_roomCode');
   const savedRole = sessionStorage.getItem('futdeal_playerRole');
@@ -503,12 +617,18 @@ document.addEventListener("DOMContentLoaded", () => {
     const savedName = sessionStorage.getItem('futdeal_playerName');
     if (savedName) document.getElementById("score-you-name").textContent = savedName;
     
-    document.getElementById("lobby-status").classList.remove("hidden");
-    document.getElementById("lobby-status-text").textContent = "Reconnecting...";
-    document.querySelector(".lobby-actions").style.display = "none";
-    document.querySelectorAll(".lobby-actions")[1].style.display = "none";
-    document.querySelector(".lobby-divider").style.display = "none";
-    document.getElementById("room-code-input").parentElement.style.display = "none";
+    showModal("Reconnecting...", () => {
+      // Cancel reconnection
+      sessionStorage.removeItem('futdeal_roomCode');
+      sessionStorage.removeItem('futdeal_playerRole');
+      window.location.reload();
+    });
+    
+    document.getElementById("btn-create-room").style.display = "none";
+    document.getElementById("join-divider").style.display = "none";
+    document.getElementById("join-input-group").style.display = "none";
+    document.getElementById("btn-join-room").style.display = "none";
+    document.getElementById("btn-leave-room").classList.remove("hidden");
     
     startWatchingRoom();
   }

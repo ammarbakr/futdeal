@@ -11,45 +11,53 @@
   <div class="app">
     <!-- Header: Logo -->
     <header class="app-header">
-      <div class="logo">FUT<span>DEAL</span></div>
-      <div class="header-sub">Online Draft Challenge</div>
+      <div class="header-left">
+        <div class="logo">FUT<span>DEAL</span></div>
+      </div>
+      <div class="header-right" style="display:flex; align-items:center; gap:12px;">
+        <div id="user-profile" class="user-profile" aria-label="Edit Nickname">
+          <i class="fa-solid fa-user"></i> <span id="header-username">Guest</span>
+        </div>
+        <button id="btn-leave-room" class="btn-leave hidden" aria-label="Leave Room">
+          <i class="fa-solid fa-arrow-right-from-bracket"></i>
+        </button>
+      </div>
     </header>
 
     <!-- Lobby Board -->
     <main id="lobby-board" class="board-section">
-      <div class="lobby-container">
-        <h2>Welcome to FutDeal</h2>
-        
-        <div class="input-group">
-          <label for="player-name">Nickname</label>
-          <input type="text" id="player-name" placeholder="Enter your nickname" maxlength="15" />
+      <div class="lobby-glass-card">
+        <div class="lobby-header">
+          <h2>Welcome to FutDeal</h2>
+          <p>Create or join a draft challenge</p>
         </div>
 
-        <div class="lobby-actions">
-          <button id="btn-create-room" class="action-btn action-btn--keep">Create Room</button>
+        <button id="btn-create-room" class="lobby-btn lobby-btn-primary">
+          <i class="fa-solid fa-plus"></i> Create Room
+        </button>
+
+        <div id="join-divider" class="neon-divider">
+          <span>OR</span>
         </div>
 
-        <div class="lobby-divider"><span>OR</span></div>
-
-        <div class="input-group">
-          <label for="room-code-input">Room Code</label>
-          <input type="text" id="room-code-input" placeholder="e.g. ABCD" maxlength="4" style="text-transform: uppercase;" />
+        <div id="join-input-group" class="code-input-group">
+          <input type="text" id="room-code-input" placeholder="* * * *" maxlength="4" required />
+          <button id="btn-clear-code" class="btn-clear-code hidden" aria-label="Clear Room Code">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
         </div>
 
-        <div class="lobby-actions">
-          <button id="btn-join-room" class="action-btn action-btn--ignore">Join Room</button>
-        </div>
+        <button id="btn-join-room" class="lobby-btn lobby-btn-secondary">
+          <i class="fa-solid fa-right-to-bracket"></i> Join Room
+        </button>
 
-        <div id="lobby-status" class="lobby-status hidden">
-          <div class="spinner"></div>
-          <p id="lobby-status-text">Waiting for opponent...</p>
-        </div>
-        
-        <div id="room-code-display" class="room-code-display hidden">
-          <span>Room Code:</span>
+        <div id="room-code-display" class="room-code-card hidden">
+          <span>Room Code</span>
           <strong id="display-code"></strong>
           <p class="small-text">Share this code with your opponent.</p>
         </div>
+        
+        <button id="btn-cancel-lobby" class="lobby-btn lobby-btn-secondary hidden" style="margin-top: 16px;">Cancel</button>
       </div>
     </main>
 
@@ -164,6 +172,34 @@
         </button>
       </div>
     </main>
+
+    <!-- Global Action Modal -->
+    <div id="global-modal" class="modal-overlay hidden">
+      <div class="modal-content">
+        <div class="radar-spinner" id="modal-spinner">
+          <div class="radar-ping"></div>
+        </div>
+        <p id="modal-status-text">Processing...</p>
+        <div style="display: flex; gap: 12px; margin-top: 24px;">
+          <button id="btn-modal-cancel" class="lobby-btn lobby-btn-secondary">Cancel</button>
+          <button id="btn-modal-confirm" class="lobby-btn lobby-btn-primary hidden">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nickname Prompt Modal -->
+    <div id="nickname-modal" class="modal-overlay hidden">
+      <div class="modal-content">
+        <h2>Your Profile</h2>
+        <div class="floating-input-group" style="width: 100%;">
+          <input type="text" id="modal-player-name" placeholder=" " maxlength="15" required />
+          <label for="modal-player-name">Nickname</label>
+        </div>
+        <button id="btn-save-nickname" class="lobby-btn lobby-btn-primary">
+          <i class="fa-solid fa-check"></i> Save
+        </button>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="js/main.js"></script>

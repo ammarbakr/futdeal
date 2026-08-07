@@ -110,6 +110,10 @@ export async function setStatus(code, status) {
   await update(ref(db, `rooms/${code}`), { status });
 }
 
+export async function deleteRoom(code) {
+  await set(ref(db, `rooms/${code}`), null);
+}
+
 export async function submitTactic(code, role, tactic) {
   await update(ref(db, `rooms/${code}/players/${role}`), { tactic });
 }
