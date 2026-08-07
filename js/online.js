@@ -114,6 +114,22 @@ export async function deleteRoom(code) {
   await set(ref(db, `rooms/${code}`), null);
 }
 
+export async function restartRoom(code) {
+  const roomRef = ref(db, `rooms/${code}`);
+  const updates = {
+    status: 'drafting',
+    seed: Math.floor(Math.random() * 1000000),
+    turn: 'host',
+    'players/host/team': {GK:null, DF:null, MF:null, AT:null, Manager:null},
+    'players/host/turnIndex': 0,
+    'players/host/tactic': null,
+    'players/guest/team': {GK:null, DF:null, MF:null, AT:null, Manager:null},
+    'players/guest/turnIndex': 0,
+    'players/guest/tactic': null,
+  };
+  await update(roomRef, updates);
+}
+
 export async function submitTactic(code, role, tactic) {
   await update(ref(db, `rooms/${code}/players/${role}`), { tactic });
 }

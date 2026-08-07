@@ -124,27 +124,52 @@ function initLobby() {
       showToast("Failed to create room: " + e.message, "error");
     }
   });
-  const roomCodeInput = document.getElementById("room-code-input");
+  const codeInputs = document.querySelectorAll(".code-char");
   const btnClearCode = document.getElementById("btn-clear-code");
 
-  roomCodeInput.addEventListener("input", (e) => {
-    let val = e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase();
-    e.target.value = val;
-    if (val.length > 0) {
-      btnClearCode.classList.remove("hidden");
-    } else {
-      btnClearCode.classList.add("hidden");
-    }
+  const updateClearBtn = () => {
+    const hasText = Array.from(codeInputs).some(i => i.value.length > 0);
+    if (hasText) btnClearCode.classList.remove("hidden");
+    else btnClearCode.classList.add("hidden");
+  };
+
+  codeInputs.forEach((input, index) => {
+    input.addEventListener("input", () => {
+      input.value = input.value.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(-1);
+      if (input.value && index < codeInputs.length - 1) {
+        codeInputs[index + 1].focus();
+      }
+      updateClearBtn();
+    });
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Backspace" && !input.value && index > 0) {
+        codeInputs[index - 1].focus();
+      }
+    });
+
+    input.addEventListener("paste", (e) => {
+      e.preventDefault();
+      const pasted = (e.clipboardData || window.clipboardData).getData("text").replace(/[^a-zA-Z]/g, '').toUpperCase();
+      for (let i = 0; i < codeInputs.length; i++) {
+        if (pasted[i]) {
+          codeInputs[i].value = pasted[i];
+          if (i < codeInputs.length - 1) codeInputs[i + 1].focus();
+          else codeInputs[i].focus();
+        }
+      }
+      updateClearBtn();
+    });
   });
 
   btnClearCode.addEventListener("click", () => {
-    roomCodeInput.value = "";
+    codeInputs.forEach(i => i.value = "");
     btnClearCode.classList.add("hidden");
-    roomCodeInput.focus();
+    codeInputs[0].focus();
   });
 
   document.getElementById("btn-join-room").addEventListener("click", async () => {
-    const code = document.getElementById("room-code-input").value.trim().toUpperCase();
+    const code = Array.from(document.querySelectorAll(".code-char")).map(i => i.value).join('');
     const name = localStorage.getItem('futdeal_username');
     if (!name) {
       nicknameModal.classList.remove("hidden");
@@ -223,8 +248,8 @@ function startWatchingRoom() {
       }
     }
     
-    // First time we transition to drafting, or if we just reconnected to an already drafting room
-    if (state.status === 'drafting' && (!prevState || prevState.status === 'waiting' || (prevState && !document.getElementById("lobby-board").classList.contains("hidden")))) {
+    // First time we transition to drafting, or if we just reconnected to an already drafting room, or restarted
+    if (state.status === 'drafting' && (!prevState || prevState.status === 'waiting' || prevState.status === 'finished' || (prevState && !document.getElementById("lobby-board").classList.contains("hidden")))) {
       hideModal();
       startGame();
     }
@@ -523,18 +548,14 @@ function resolveMatch() {
     };
   }
 
-  showResultScreen(myResult, () => {
-    sessionStorage.removeItem('futdeal_roomCode');
-    sessionStorage.removeItem('futdeal_playerRole');
-    window.location.reload();
+  showResultScreen(myResult, async () => {
+    if (playerRole === 'host') {
+      showModal("Restarting room...", null);
+      await online.restartRoom(currentRoomCode);
+    } else {
+      showModal("Waiting for host to restart...", null);
+    }
   });
-  
-  if (playerRole === 'host') {
-    // Delete room after 5 seconds to ensure guest receives the final state
-    setTimeout(() => {
-      online.deleteRoom(currentRoomCode);
-    }, 5000);
-  }
 }
 
 /**

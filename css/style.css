@@ -1358,49 +1358,60 @@ body::after {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
   opacity: 0;
   visibility: hidden;
-  transition: all 0.3s ease;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.3s;
+}
+
+.modal-overlay.hidden {
+  display: flex !important; /* overrides utility class to allow transitions */
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .modal-overlay:not(.hidden) {
   opacity: 1;
   visibility: visible;
+  pointer-events: auto;
 }
 
 .modal-content {
-  background: rgba(13, 18, 29, 0.85);
+  background: rgba(13, 18, 29, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-lg);
   padding: 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6);
-  transform: translateY(20px);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  gap: 24px;
+  box-shadow: 
+    0 30px 60px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transform: translateY(20px) scale(0.95);
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   width: 90%;
-  max-width: 360px;
+  max-width: 400px;
 }
 
 .modal-overlay:not(.hidden) .modal-content {
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
 }
 
 #modal-status-text {
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-size: 1.25rem;
+  font-weight: 700;
   color: #fff;
   text-align: center;
-  letter-spacing: 0.05em;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
 }
 
 /* ── Profile Badge ────────────────────────────────────────── */
@@ -1446,55 +1457,60 @@ body::after {
 /* ── Room Code Input ──────────────────────────────────────── */
 .code-input-group {
   position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
   width: 100%;
-  margin-bottom: 16px;
+  margin-bottom: 24px;
 }
 
-.code-input-group input {
-  width: 100%;
-  background: rgba(0, 0, 0, 0.2);
+.code-input-group .code-char {
+  width: 56px;
+  height: 64px;
+  background: rgba(0, 0, 0, 0.3);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-md);
   color: #fff;
   font-family: var(--font-display);
-  font-size: 2.5rem;
+  font-size: 2rem;
   font-weight: 900;
   text-align: center;
   text-transform: uppercase;
-  letter-spacing: 0.5em;
-  padding: 16px 40px 16px 40px; /* Space for clear button */
   outline: none;
-  transition: all 0.3s ease;
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
-  text-shadow: 0 0 10px rgba(0, 242, 96, 0.3);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+  text-shadow: 0 0 10px rgba(0, 242, 96, 0.5);
 }
 
-.code-input-group input:focus {
+.code-input-group .code-char:focus {
   border-color: var(--green);
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3), 0 0 0 2px rgba(0, 242, 96, 0.2);
-  background: rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(0, 242, 96, 0.3);
+  transform: translateY(-4px);
+  background: rgba(0, 0, 0, 0.4);
 }
 
-.code-input-group input::placeholder {
-  color: rgba(255, 255, 255, 0.15);
+.code-input-group .code-char::placeholder {
+  color: rgba(255, 255, 255, 0.1);
   font-weight: 700;
 }
 
 .code-input-group .btn-clear-code {
   position: absolute;
-  right: 16px;
+  right: 0;
   top: 50%;
   transform: translateY(-50%);
   background: transparent;
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   padding: 8px;
-  transition: color 0.2s ease;
+  transition: color 0.2s ease, transform 0.2s ease;
   z-index: 10;
 }
 
 .code-input-group .btn-clear-code:hover {
   color: #fff;
+  transform: translateY(-50%) scale(1.1);
 }
