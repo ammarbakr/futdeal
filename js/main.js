@@ -325,15 +325,14 @@ async function handleTacticChosen(tactic) {
 }
 
 function resolveMatch() {
-  const player = roomState.players[playerRole];
-  const opponentRole = playerRole === 'host' ? 'guest' : 'host';
-  const opponent = roomState.players[opponentRole];
+  const host = roomState.players.host;
+  const guest = roomState.players.guest;
   
-  const playerAvg = Math.round(
-    Object.values(player.team).reduce((sum, c) => sum + c.stat, 0) / Object.values(player.team).length
+  const hostAvg = Math.round(
+    Object.values(host.team).reduce((sum, c) => sum + c.stat, 0) / Object.values(host.team).length
   );
-  const opponentAvg = Math.round(
-    Object.values(opponent.team).reduce((sum, c) => sum + c.stat, 0) / Object.values(opponent.team).length
+  const guestAvg = Math.round(
+    Object.values(guest.team).reduce((sum, c) => sum + c.stat, 0) / Object.values(guest.team).length
   );
 
   // We use room seed so both get the same match outcome randomizer
@@ -345,16 +344,35 @@ function resolveMatch() {
     return x - Math.floor(x);
   };
   
-  const matchResult = simulateMatch(
-    playerAvg,
-    opponentAvg,
-    player.tactic,
-    opponent.tactic
+  // ALWAYS simulate from the perspective of the Host
+  // This ensures the order of Math.random() calls is identical for both clients
+  const hostMatchResult = simulateMatch(
+    hostAvg,
+    guestAvg,
+    host.tactic,
+    guest.tactic
   );
   
   Math.random = originalRandom;
 
-  showResultScreen(matchResult, () => {
+  // Map result to current player's perspective
+  let myResult;
+  if (playerRole === 'host') {
+    myResult = hostMatchResult;
+  } else {
+    myResult = {
+      playerScore: hostMatchResult.opponentScore,
+      opponentScore: hostMatchResult.playerScore,
+      playerAdj: hostMatchResult.opponentAdj,
+      opponentAdj: hostMatchResult.playerAdj,
+      boost: hostMatchResult.boost === 'player' ? 'opponent' : (hostMatchResult.boost === 'opponent' ? 'player' : 'none'),
+      playerTactic: hostMatchResult.opponentTactic,
+      opponentTactic: hostMatchResult.playerTactic,
+      tacticLabels: hostMatchResult.tacticLabels
+    };
+  }
+
+  showResultScreen(myResult, () => {
     sessionStorage.removeItem('futdeal_roomCode');
     sessionStorage.removeItem('futdeal_playerRole');
     window.location.reload();
