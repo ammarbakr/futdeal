@@ -36,6 +36,17 @@ export function resetGame() {
 }
 
 /**
+ * Restores the draft state from remote data (for reconnecting)
+ */
+export function restoreState(team, turnIndex) {
+  STATE.team = { GK: null, DF: null, MF: null, AT: null, Manager: null, ...(team || {}) };
+  STATE.currentIndex = turnIndex;
+  STATE.isComplete = turnIndex >= DRAFT_ORDER.length;
+  STATE.interactionState = "IDLE";
+  STATE.ignoreUsedThisRound = false;
+}
+
+/**
  * Starts a round. Returns 4 cards for the current position.
  * Uses a seed so both players get a predictable pool, but gives different cards to host/guest.
  */

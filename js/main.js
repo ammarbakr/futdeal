@@ -5,6 +5,7 @@
 import {
   getState,
   resetGame,
+  restoreState,
   beginRound,
   registerFlip,
   keepCard,
@@ -56,6 +57,9 @@ function initLobby() {
       currentRoomCode = await online.createRoom(name);
       playerRole = 'host';
       
+      sessionStorage.setItem('futdeal_roomCode', currentRoomCode);
+      sessionStorage.setItem('futdeal_playerRole', playerRole);
+      
       document.getElementById("display-code").textContent = currentRoomCode;
       document.getElementById("room-code-display").classList.remove("hidden");
       document.getElementById("lobby-status").classList.remove("hidden");
@@ -83,6 +87,9 @@ function initLobby() {
       currentRoomCode = code;
       playerRole = 'guest';
       
+      sessionStorage.setItem('futdeal_roomCode', currentRoomCode);
+      sessionStorage.setItem('futdeal_playerRole', playerRole);
+      
       document.getElementById("lobby-status").classList.remove("hidden");
       document.getElementById("lobby-status-text").textContent = "Joining...";
       
@@ -101,8 +108,8 @@ function startWatchingRoom() {
     const prevState = roomState;
     roomState = state;
     
-    if (state.status === 'drafting' && (!prevState || prevState.status === 'waiting')) {
-      // Transition to draft
+    // First time we transition to drafting, or if we just reconnected to an already drafting room
+    if (state.status === 'drafting' && (!prevState || prevState.status === 'waiting' || (prevState && !document.getElementById("lobby-board").classList.contains("hidden")))) {
       startGame();
     }
     
@@ -110,7 +117,7 @@ function startWatchingRoom() {
       checkTurnState();
     }
     
-    if (state.status === 'matching' && (!prevState || prevState.status === 'drafting')) {
+    if (state.status === 'matching' && (!prevState || prevState.status === 'drafting' || (prevState && !document.getElementById("lobby-board").classList.contains("hidden")))) {
       transitionToMatch();
     }
     
@@ -131,7 +138,8 @@ function checkTurnState() {
   if (isMyTurn) {
     // If I haven't completed my draft, start a round
     const state = getState();
-    if (!state.isComplete && !activeCardEl && document.getElementById("action-bar").innerHTML === "") {
+    // Use .children.length === 0 instead of .innerHTML === "" to ignore whitespaces
+    if (!state.isComplete && !activeCardEl && document.getElementById("action-bar").children.length === 0) {
       startRound();
     }
   } else {
@@ -183,7 +191,6 @@ async function handleKeep() {
     getPosLabel().textContent = "Squad Ready";
     
     // If guest is also done, or host is done, check if both done
-    // Wait for the roomState to catch up, or trigger status change if I'm the last one
     const opponentRole = playerRole === 'host' ? 'guest' : 'host';
     if (roomState.players[opponentRole].turnIndex === 5) {
       // Both done
@@ -258,6 +265,8 @@ function startRound() {
  * Transitions from Draft to Match screen.
  */
 function transitionToMatch() {
+  document.getElementById("lobby-board").classList.add("hidden");
+  
   const { team } = getState();
   
   // Calculate average
@@ -280,6 +289,21 @@ function transitionToMatch() {
     TACTIC_LABELS,
     handleTacticChosen
   );
+  
+  // Check if we already picked a tactic before reconnecting
+  const myTactic = roomState.players[playerRole].tactic;
+  if (myTactic) {
+    document.querySelectorAll('.tactic-btn').forEach(btn => {
+      btn.style.opacity = "0.5";
+      btn.style.pointerEvents = "none";
+    });
+    const tacticBtn = document.getElementById(`tactic-${myTactic.toLowerCase()}`);
+    if (tacticBtn) {
+      tacticBtn.style.opacity = "1";
+      tacticBtn.style.boxShadow = "0 0 20px rgba(255,255,255,0.5)";
+    }
+    document.querySelector('.tactic-hint').textContent = "Waiting for opponent...";
+  }
 }
 
 /**
@@ -331,24 +355,33 @@ function resolveMatch() {
   Math.random = originalRandom;
 
   showResultScreen(matchResult, () => {
+    sessionStorage.removeItem('futdeal_roomCode');
+    sessionStorage.removeItem('futdeal_playerRole');
     window.location.reload();
   });
 }
 
 /**
- * Starts/Restarts the game.
+ * Starts/Restarts the game and sets up Draft board.
  */
 function startGame() {
   // Hide lobby, show draft board
   document.getElementById("lobby-board").classList.add("hidden");
   showDraftBoard();
   
-  resetGame();
+  // Restore state from roomState (useful for reconnecting)
+  const myData = roomState.players[playerRole];
+  if (myData) {
+    restoreState(myData.team, myData.turnIndex);
+  } else {
+    resetGame();
+  }
   
   activeCardEl = null;
   activeCardData = null;
   
   initTeamSlots(DRAFT_ORDER);
+  updateTopSlots();
   
   checkTurnState();
 }
@@ -387,4 +420,21 @@ function setupDrawer() {
 document.addEventListener("DOMContentLoaded", () => {
   setupDrawer();
   initLobby();
+  
+  // Try to restore session
+  const savedCode = sessionStorage.getItem('futdeal_roomCode');
+  const savedRole = sessionStorage.getItem('futdeal_playerRole');
+  if (savedCode && savedRole) {
+    currentRoomCode = savedCode;
+    playerRole = savedRole;
+    
+    document.getElementById("lobby-status").classList.remove("hidden");
+    document.getElementById("lobby-status-text").textContent = "Reconnecting...";
+    document.querySelector(".lobby-actions").style.display = "none";
+    document.querySelectorAll(".lobby-actions")[1].style.display = "none";
+    document.querySelector(".lobby-divider").style.display = "none";
+    document.getElementById("room-code-input").parentElement.style.display = "none";
+    
+    startWatchingRoom();
+  }
 });
