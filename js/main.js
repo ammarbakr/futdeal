@@ -55,6 +55,8 @@ function initLobby() {
       
       sessionStorage.setItem('futdeal_roomCode', currentRoomCode);
       sessionStorage.setItem('futdeal_playerRole', playerRole);
+      sessionStorage.setItem('futdeal_playerName', name);
+      document.getElementById("score-you-name").textContent = name;
       
       document.getElementById("display-code").textContent = currentRoomCode;
       document.getElementById("room-code-display").classList.remove("hidden");
@@ -111,6 +113,9 @@ function startWatchingRoom() {
       const oppRole = playerRole === 'host' ? 'guest' : 'host';
       const oppData = state.players[oppRole];
       if (oppData) {
+        if (oppData.name) {
+          document.getElementById("score-opp-name").textContent = oppData.name;
+        }
         const draftedCards = Object.values(oppData.team).filter(c => c !== null);
         const oppAvg = draftedCards.length > 0 
           ? Math.round(draftedCards.reduce((sum, c) => sum + c.stat, 0) / draftedCards.length) 
