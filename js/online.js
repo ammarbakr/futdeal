@@ -40,11 +40,11 @@ export async function createRoom(playerName) {
     seed: Math.floor(Math.random() * 1000000), // Random seed to generate same random outcomes
     turn: 'host', // 'host' or 'guest'
     players: {
-      host: {
-        name: playerName,
+      host: { 
+        name: playerName, 
+        team: {GK:null, DF:null, MF:null, AT:null, Manager:null}, 
+        turnIndex: 0,
         connected: true,
-        turnIndex: 0, // Which position they are picking
-        team: {},
         tactic: null
       }
     }
@@ -71,11 +71,12 @@ export async function joinRoom(code, playerName) {
 
   await update(roomRef, {
     status: 'drafting',
-    'players/guest': {
-      name: playerName,
-      connected: true,
+    turn: 'host', // host goes first
+    'players/guest': { 
+      name: playerName, 
+      team: {GK:null, DF:null, MF:null, AT:null, Manager:null}, 
       turnIndex: 0,
-      team: {},
+      connected: true,
       tactic: null
     }
   });

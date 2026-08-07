@@ -55,36 +55,55 @@
 
     <!-- Draft Board -->
     <main id="draft-board" class="board-section hidden">
-      <!-- Draft Progress Header (Contains Drawer) -->
-      <header id="progress-header" class="draft-progress-header">
-        <div class="progress-info">
-          <span class="progress-text">Draft Progress: <span id="draft-count">0</span>/5</span>
-          <div class="progress-bar-bg">
-            <div id="draft-progress-fill" class="progress-bar-fill"></div>
+      
+      <!-- MATCH SCOREBOARD -->
+      <div id="match-scoreboard" class="match-scoreboard">
+        <!-- LEFT: YOU -->
+        <div class="score-side score-left">
+          <div class="score-name" id="score-you-name">YOU</div>
+          <div class="score-ovr" id="score-you-ovr">--</div>
+          <div class="score-dots" id="score-you-dots">
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
           </div>
         </div>
-        <button id="btn-toggle-squad" class="btn-view-squad">
-          Squad <i class="fa-solid fa-chevron-down"></i>
-        </button>
+        
+        <!-- CENTER: ROUND INFO -->
+        <div class="score-center">
+          <div class="score-round-label">DRAFTING</div>
+          <div class="score-pos-label" id="score-current-pos">WAITING</div>
+        </div>
 
-        <!-- Floating Accordion Squad Drawer -->
-        <aside id="squad-drawer" class="squad-drawer drawer-closed">
-          <div id="squad-list" class="squad-list">
-            <!-- Populated by ui.js -->
+        <!-- RIGHT: OPPONENT -->
+        <div class="score-side score-right">
+          <div class="score-name" id="score-opp-name">OPPONENT</div>
+          <div class="score-ovr" id="score-opp-ovr">--</div>
+          <div class="score-dots" id="score-opp-dots">
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
           </div>
-        </aside>
-      </header>
-
-      <div class="draft-header">
-        <span class="draft-label">Now Picking</span>
-        <span id="current-pos-label" aria-live="polite" aria-atomic="true"></span>
-        <span class="draft-hint">Tap to reveal</span>
+        </div>
       </div>
+
       <div id="draft-area" class="draft-area" aria-label="Draft choices" aria-live="polite">
         <!-- Cards inserted by js -->
       </div>
-      <div id="action-bar">
+      
+      <div id="action-bar" class="action-bar" aria-label="Draft actions">
         <!-- Keep/Ignore buttons inserted by js -->
+      </div>
+      
+      <!-- BOTTOM SQUAD DRAWER -->
+      <button id="btn-toggle-squad" class="btn-toggle-squad-fab" aria-label="Toggle Squad">
+        <i class="fa-solid fa-list-ul"></i>
+      </button>
+
+      <div id="squad-drawer" class="squad-drawer bottom-drawer drawer-closed" aria-hidden="true">
+        <div class="drawer-content">
+          <div class="drawer-handle"></div>
+          <h3>Your Squad</h3>
+          <div id="team-slots-top" class="team-slots-top">
+            <!-- Slots inserted by js -->
+          </div>
+        </div>
       </div>
     </main>
 

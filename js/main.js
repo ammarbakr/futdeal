@@ -34,10 +34,6 @@ import * as online from "./online.js";
 
 const actionBar = document.getElementById("action-bar");
 
-function getPosLabel() {
-  return document.getElementById("current-pos-label");
-}
-
 let activeCardEl = null;
 let activeCardData = null;
 
@@ -89,6 +85,8 @@ function initLobby() {
       
       sessionStorage.setItem('futdeal_roomCode', currentRoomCode);
       sessionStorage.setItem('futdeal_playerRole', playerRole);
+      sessionStorage.setItem('futdeal_playerName', name);
+      document.getElementById("score-you-name").textContent = name;
       
       document.getElementById("lobby-status").classList.remove("hidden");
       document.getElementById("lobby-status-text").textContent = "Joining...";
@@ -107,6 +105,25 @@ function startWatchingRoom() {
     
     const prevState = roomState;
     roomState = state;
+    
+    // Update opponent live stats
+    if (document.getElementById("lobby-board").classList.contains("hidden")) {
+      const oppRole = playerRole === 'host' ? 'guest' : 'host';
+      const oppData = state.players[oppRole];
+      if (oppData) {
+        const draftedCards = Object.values(oppData.team).filter(c => c !== null);
+        const oppAvg = draftedCards.length > 0 
+          ? Math.round(draftedCards.reduce((sum, c) => sum + c.stat, 0) / draftedCards.length) 
+          : 0;
+        
+        document.getElementById("score-opp-ovr").textContent = oppAvg > 0 ? oppAvg : "--";
+        const oppDots = document.getElementById("score-opp-dots").querySelectorAll(".dot");
+        oppDots.forEach((dot, i) => {
+          if (i < oppData.turnIndex) dot.classList.add("filled");
+          else dot.classList.remove("filled");
+        });
+      }
+    }
     
     // First time we transition to drafting, or if we just reconnected to an already drafting room
     if (state.status === 'drafting' && (!prevState || prevState.status === 'waiting' || (prevState && !document.getElementById("lobby-board").classList.contains("hidden")))) {
@@ -147,7 +164,7 @@ function checkTurnState() {
     clearActionButtons();
     const area = document.getElementById("draft-area");
     area.innerHTML = `<div style="text-align:center; padding: 40px; grid-column: span 2; color: var(--slate); font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.7;">Waiting for Opponent to pick...</div>`;
-    getPosLabel().textContent = "WAITING...";
+    document.getElementById("score-current-pos").textContent = "WAITING...";
   }
 }
 
@@ -157,10 +174,22 @@ function checkTurnState() {
 function updateTopSlots() {
   const state = getState();
   renderTeamSlots(state.team, DRAFT_ORDER, state.currentIndex);
+  
+  const teamArray = Object.values(state.team).filter(c => c !== null);
+  const myAvg = teamArray.length > 0 ? Math.round(teamArray.reduce((sum, c) => sum + c.stat, 0) / teamArray.length) : 0;
+  document.getElementById("score-you-ovr").textContent = myAvg > 0 ? myAvg : "--";
+  
+  const myDots = document.getElementById("score-you-dots").querySelectorAll(".dot");
+  myDots.forEach((dot, i) => {
+    if (i < state.currentIndex) dot.classList.add("filled");
+    else dot.classList.remove("filled");
+  });
 
   if (!state.isComplete) {
     highlightActiveSlot(state.currentIndex);
-    getPosLabel().textContent = POSITION_LABELS[DRAFT_ORDER[state.currentIndex]];
+    document.getElementById("score-current-pos").textContent = POSITION_LABELS[DRAFT_ORDER[state.currentIndex]];
+  } else {
+    document.getElementById("score-current-pos").textContent = "READY";
   }
 }
 
@@ -188,16 +217,12 @@ async function handleKeep() {
   if (state.isComplete) {
     showToast(`${keptName} locked in. Squad complete! 🏆`, "success");
     updateTopSlots();
-    getPosLabel().textContent = "Squad Ready";
     
     // If guest is also done, or host is done, check if both done
     const opponentRole = playerRole === 'host' ? 'guest' : 'host';
     if (roomState.players[opponentRole].turnIndex === 5) {
       // Both done
       await online.setStatus(currentRoomCode, 'matching');
-    } else {
-       // Just wait, pass turn is handled by submitPick
-       getPosLabel().textContent = "Waiting for Opponent to finish...";
     }
   } else {
     showToast(`${keptName} locked in.`, "success");
@@ -254,10 +279,11 @@ function startRound() {
   updateTopSlots();
   clearActionButtons();
   
+  const { currentIndex } = getState();
   const { choices } = beginRound(roomState.seed, playerRole);
+  
   renderChoices(choices, handleCardFlip);
   
-  const { currentIndex } = getState();
   showToast(`Your turn: Pick ${POSITION_LABELS[DRAFT_ORDER[currentIndex]]}`, "info");
 }
 
@@ -408,27 +434,23 @@ function startGame() {
 function setupDrawer() {
   const toggleBtn = document.getElementById("btn-toggle-squad");
   const drawer = document.getElementById("squad-drawer");
-  const header = document.getElementById("progress-header");
 
-  if (toggleBtn && drawer && header) {
+  if (toggleBtn && drawer) {
     toggleBtn.addEventListener("click", () => {
       const isClosed = drawer.classList.contains("drawer-closed");
       if (isClosed) {
         drawer.classList.remove("drawer-closed");
-        header.classList.add("drawer-open");
-        toggleBtn.innerHTML = 'Squad <i class="fa-solid fa-chevron-up"></i>';
+        toggleBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
       } else {
         drawer.classList.add("drawer-closed");
-        header.classList.remove("drawer-open");
-        toggleBtn.innerHTML = 'Squad <i class="fa-solid fa-chevron-down"></i>';
+        toggleBtn.innerHTML = '<i class="fa-solid fa-list-ul"></i>';
       }
     });
 
     drawer.addEventListener("click", (e) => {
       if (e.target === drawer) {
         drawer.classList.add("drawer-closed");
-        header.classList.remove("drawer-open");
-        toggleBtn.innerHTML = 'Squad <i class="fa-solid fa-chevron-down"></i>';
+        toggleBtn.innerHTML = '<i class="fa-solid fa-list-ul"></i>';
       }
     });
   }
@@ -445,6 +467,8 @@ document.addEventListener("DOMContentLoaded", () => {
   if (savedCode && savedRole) {
     currentRoomCode = savedCode;
     playerRole = savedRole;
+    const savedName = sessionStorage.getItem('futdeal_playerName');
+    if (savedName) document.getElementById("score-you-name").textContent = savedName;
     
     document.getElementById("lobby-status").classList.remove("hidden");
     document.getElementById("lobby-status-text").textContent = "Reconnecting...";
