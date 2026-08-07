@@ -249,7 +249,7 @@ function startWatchingRoom() {
     }
     
     // First time we transition to drafting, or if we just reconnected to an already drafting room, or restarted
-    if (state.status === 'drafting' && (!prevState || prevState.status === 'waiting' || prevState.status === 'finished' || (prevState && !document.getElementById("lobby-board").classList.contains("hidden")))) {
+    if (state.status === 'drafting' && (!prevState || prevState.status === 'waiting' || prevState.status === 'finished' || prevState.status === 'matching' || (prevState && !document.getElementById("lobby-board").classList.contains("hidden")))) {
       hideModal();
       startGame();
     }
