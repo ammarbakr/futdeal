@@ -187,7 +187,9 @@ function updateTopSlots() {
 
   if (!state.isComplete) {
     highlightActiveSlot(state.currentIndex);
-    document.getElementById("score-current-pos").textContent = POSITION_LABELS[DRAFT_ORDER[state.currentIndex]];
+    let pos = DRAFT_ORDER[state.currentIndex];
+    if (pos === "Manager") pos = "MGR";
+    document.getElementById("score-current-pos").textContent = pos;
   } else {
     document.getElementById("score-current-pos").textContent = "READY";
   }
