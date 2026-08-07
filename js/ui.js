@@ -150,12 +150,7 @@ export function renderChoices(cards, onFlip) {
     icon.className = "card-back-icon";
     icon.innerHTML = '<i class="fa-solid fa-futbol"></i>';
 
-    const brand = document.createElement("span");
-    brand.className = "card-back-brand";
-    brand.textContent = "FutDeal";
-
     logoWrap.appendChild(icon);
-    logoWrap.appendChild(brand);
     front.appendChild(logoWrap);
 
     const back = document.createElement("div");
@@ -220,10 +215,6 @@ export function flipCard(cardEl, card) {
   frag.appendChild(revealed);
   back.replaceChildren(frag);
 
-  requestAnimationFrame(() => {
-    barFill.style.width = `${barPct}%`;
-  });
-
   cardEl.classList.remove("draft-card--facedown");
   cardEl.classList.add("draft-card--flipped");
 }
@@ -283,10 +274,16 @@ export function showToast(message, type = "info") {
 // ─── Screen Visibility Toggling ───────────────────────────────────────────────
 
 function switchScreen(screenId) {
+  document.getElementById("lobby-board")?.classList.add("hidden");
   document.getElementById("draft-board").classList.add("hidden");
   document.getElementById("match-board").classList.add("hidden");
   document.getElementById("result-board").classList.add("hidden");
   document.getElementById(screenId).classList.remove("hidden");
+
+  const header = document.getElementById("main-header");
+  if (header) {
+    header.style.display = screenId === "lobby-board" ? "" : "none";
+  }
 }
 
 export function showDraftBoard() {

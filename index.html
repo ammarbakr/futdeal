@@ -10,7 +10,7 @@
 <body>
   <div class="app">
     <!-- Header: Logo -->
-    <header class="app-header">
+    <header id="main-header" class="app-header">
       <div class="header-left">
         <div class="logo">FUT<span>DEAL</span></div>
       </div>
@@ -18,9 +18,6 @@
         <div id="user-profile" class="user-profile" aria-label="Edit Nickname">
           <i class="fa-solid fa-user"></i> <span id="header-username">Guest</span>
         </div>
-        <button id="btn-leave-room" class="btn-leave hidden" aria-label="Leave Room">
-          <i class="fa-solid fa-arrow-right-from-bracket"></i>
-        </button>
       </div>
     </header>
 
@@ -40,20 +37,13 @@
           <span>OR</span>
         </div>
 
+        <p style="text-align: center; color: var(--text-muted); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 0.1em;">Enter Room Code</p>
         <div id="join-input-group" class="code-input-group">
-          <input type="text" class="code-char" maxlength="1" placeholder="*" />
-          <input type="text" class="code-char" maxlength="1" placeholder="*" />
-          <input type="text" class="code-char" maxlength="1" placeholder="*" />
-          <input type="text" class="code-char" maxlength="1" placeholder="*" />
-          <button id="btn-clear-code" class="btn-clear-code hidden" aria-label="Clear Room Code">
-            <i class="fa-solid fa-xmark"></i>
-          </button>
+          <input type="text" class="code-char" maxlength="1" />
+          <input type="text" class="code-char" maxlength="1" />
+          <input type="text" class="code-char" maxlength="1" />
+          <input type="text" class="code-char" maxlength="1" />
         </div>
-
-        <button id="btn-join-room" class="lobby-btn lobby-btn-secondary">
-          <i class="fa-solid fa-right-to-bracket"></i> Join Room
-        </button>
-
         <div id="room-code-display" class="room-code-card hidden">
           <span>Room Code</span>
           <strong id="display-code"></strong>
@@ -82,6 +72,9 @@
         <div class="score-center">
           <div class="score-round-label">DRAFTING</div>
           <div class="score-pos-label" id="score-current-pos">WAITING</div>
+          <button id="btn-leave-room" class="btn-leave-inline hidden" aria-label="Leave Room">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i> Leave
+          </button>
         </div>
 
         <!-- RIGHT: OPPONENT -->
@@ -179,11 +172,9 @@
     <!-- Global Action Modal -->
     <div id="global-modal" class="modal-overlay hidden">
       <div class="modal-content">
-        <div class="radar-spinner" id="modal-spinner">
-          <div class="radar-ping"></div>
-        </div>
+        <div class="beautiful-spinner" id="modal-spinner"></div>
         <p id="modal-status-text">Processing...</p>
-        <div style="display: flex; gap: 12px; margin-top: 24px;">
+        <div class="modal-actions">
           <button id="btn-modal-cancel" class="lobby-btn lobby-btn-secondary">Cancel</button>
           <button id="btn-modal-confirm" class="lobby-btn lobby-btn-primary hidden">Confirm</button>
         </div>

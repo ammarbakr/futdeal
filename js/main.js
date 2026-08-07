@@ -96,7 +96,7 @@ function initLobby() {
     }
     
     const btnCreate = document.getElementById("btn-create-room");
-    btnCreate.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Waiting for opponent...';
+    btnCreate.innerHTML = '<div class="beautiful-spinner beautiful-spinner--sm"></div> Waiting for opponent...';
     btnCreate.style.pointerEvents = "none";
     btnCreate.style.opacity = "0.8";
     try {
@@ -114,10 +114,8 @@ function initLobby() {
       // Hide the join section
       document.getElementById("join-divider").style.display = "none";
       document.getElementById("join-input-group").style.display = "none";
-      document.getElementById("btn-join-room").style.display = "none";
       
       document.getElementById("btn-cancel-lobby").classList.remove("hidden");
-      document.getElementById("btn-leave-room").classList.remove("hidden");
       
       startWatchingRoom();
     } catch (e) {
@@ -125,26 +123,28 @@ function initLobby() {
     }
   });
   const codeInputs = document.querySelectorAll(".code-char");
-  const btnClearCode = document.getElementById("btn-clear-code");
-
-  const updateClearBtn = () => {
-    const hasText = Array.from(codeInputs).some(i => i.value.length > 0);
-    if (hasText) btnClearCode.classList.remove("hidden");
-    else btnClearCode.classList.add("hidden");
-  };
 
   codeInputs.forEach((input, index) => {
     input.addEventListener("input", () => {
       input.value = input.value.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(-1);
       if (input.value && index < codeInputs.length - 1) {
         codeInputs[index + 1].focus();
+      } else if (input.value && index === codeInputs.length - 1) {
+        const fullCode = Array.from(codeInputs).map(i => i.value).join('');
+        if (fullCode.length === 4) attemptJoinRoom(fullCode);
       }
-      updateClearBtn();
     });
 
     input.addEventListener("keydown", (e) => {
       if (e.key === "Backspace" && !input.value && index > 0) {
         codeInputs[index - 1].focus();
+      }
+    });
+
+    input.addEventListener("focus", () => {
+      const firstEmptyIndex = Array.from(codeInputs).findIndex(i => !i.value);
+      if (firstEmptyIndex !== -1 && firstEmptyIndex < index) {
+        codeInputs[firstEmptyIndex].focus();
       }
     });
 
@@ -158,18 +158,12 @@ function initLobby() {
           else codeInputs[i].focus();
         }
       }
-      updateClearBtn();
+      const fullCode = Array.from(codeInputs).map(i => i.value).join('');
+      if (fullCode.length === 4) attemptJoinRoom(fullCode);
     });
   });
 
-  btnClearCode.addEventListener("click", () => {
-    codeInputs.forEach(i => i.value = "");
-    btnClearCode.classList.add("hidden");
-    codeInputs[0].focus();
-  });
-
-  document.getElementById("btn-join-room").addEventListener("click", async () => {
-    const code = Array.from(document.querySelectorAll(".code-char")).map(i => i.value).join('');
+  const attemptJoinRoom = async (code) => {
     const name = localStorage.getItem('futdeal_username');
     if (!name) {
       nicknameModal.classList.remove("hidden");
@@ -177,8 +171,14 @@ function initLobby() {
     }
     if (!code) return showToast("Enter room code", "warn");
     
+    const clearCodeInputs = () => {
+      codeInputs.forEach(i => i.value = "");
+      codeInputs[0].focus();
+    };
+    
     try {
       await online.joinRoom(code, name);
+      clearCodeInputs();
       currentRoomCode = code;
       playerRole = 'guest';
       
@@ -188,53 +188,53 @@ function initLobby() {
       document.getElementById("score-you-name").textContent = name;
       
       showModal("Joining...", () => {
-        // Cancel logic for guest
         sessionStorage.removeItem('futdeal_roomCode');
         sessionStorage.removeItem('futdeal_playerRole');
         window.location.reload();
       });
       
-      document.getElementById("btn-leave-room").classList.remove("hidden");
+
       
       startWatchingRoom();
     } catch (e) {
       showToast("Failed to join room: " + e.message, "error");
+      clearCodeInputs();
     }
-  });
+  };
 }
 
 function startWatchingRoom() {
   if (unsubscribeRoom) unsubscribeRoom();
   unsubscribeRoom = online.watchRoom(currentRoomCode, (state) => {
-    if (!state) {
-      if (!document.getElementById("result-board").classList.contains("hidden")) return;
-      showToast("The room was closed.", "error");
-      sessionStorage.removeItem('futdeal_roomCode');
-      sessionStorage.removeItem('futdeal_playerRole');
-      setTimeout(() => window.location.reload(), 2500);
-      return;
-    }
-    
-    if (state.status === 'abandoned') {
-      showToast("The other player has left the game.", "error");
-      sessionStorage.removeItem('futdeal_roomCode');
-      sessionStorage.removeItem('futdeal_playerRole');
-      setTimeout(() => window.location.reload(), 2500);
-      return;
-    }
-    
-    const prevState = roomState;
-    roomState = state;
-    
-    // Update opponent live stats
-    if (document.getElementById("lobby-board").classList.contains("hidden")) {
+    try {
+      if (!state) {
+        if (!document.getElementById("result-board").classList.contains("hidden")) return;
+        showToast("The room was closed.", "error");
+        sessionStorage.removeItem('futdeal_roomCode');
+        sessionStorage.removeItem('futdeal_playerRole');
+        setTimeout(() => window.location.reload(), 2500);
+        return;
+      }
+      
+      if (state.status === 'abandoned') {
+        showToast("The other player has left the game.", "error");
+        sessionStorage.removeItem('futdeal_roomCode');
+        sessionStorage.removeItem('futdeal_playerRole');
+        setTimeout(() => window.location.reload(), 2500);
+        return;
+      }
+      
+      const prevState = roomState;
+      roomState = state;
+      
+      // Update opponent live stats
       const oppRole = playerRole === 'host' ? 'guest' : 'host';
       const oppData = state.players[oppRole];
       if (oppData) {
         if (oppData.name) {
           document.getElementById("score-opp-name").textContent = oppData.name;
         }
-        const draftedCards = Object.values(oppData.team).filter(c => c !== null);
+        const draftedCards = Object.values(oppData.team || {}).filter(c => c !== null);
         const oppAvg = draftedCards.length > 0 
           ? Math.round(draftedCards.reduce((sum, c) => sum + c.stat, 0) / draftedCards.length) 
           : 0;
@@ -246,27 +246,30 @@ function startWatchingRoom() {
           else dot.classList.remove("filled");
         });
       }
-    }
-    
-    // First time we transition to drafting, or if we just reconnected to an already drafting room, or restarted
-    if (state.status === 'drafting' && (!prevState || prevState.status === 'waiting' || prevState.status === 'finished' || prevState.status === 'matching' || (prevState && !document.getElementById("lobby-board").classList.contains("hidden")))) {
-      hideModal();
-      startGame();
-    }
-    
-    if (state.status === 'drafting') {
-      checkTurnState();
-    }
-    
-    if (state.status === 'matching' && (!prevState || prevState.status === 'drafting' || (prevState && !document.getElementById("lobby-board").classList.contains("hidden")))) {
-      transitionToMatch();
-    }
-    
-    // Check if both have picked tactics
-    if (state.status === 'matching') {
-      if (state.players.host.tactic && state.players.guest.tactic && document.getElementById("result-board").classList.contains("hidden")) {
-        resolveMatch();
+      
+      // First time we transition to drafting, or if we just reconnected to an already drafting room, or restarted
+      if (state.status === 'drafting' && (!prevState || prevState.status === 'waiting' || prevState.status === 'finished' || prevState.status === 'matching' || (prevState && !document.getElementById("lobby-board").classList.contains("hidden")))) {
+        hideModal();
+        startGame();
       }
+      
+      if (state.status === 'drafting') {
+        checkTurnState();
+      }
+      
+      if (state.status === 'matching' && (!prevState || prevState.status === 'drafting' || (prevState && !document.getElementById("lobby-board").classList.contains("hidden")))) {
+        transitionToMatch();
+      }
+      
+      // Check if both have picked tactics
+      if (state.status === 'matching') {
+        if (state.players.host.tactic && state.players.guest.tactic && document.getElementById("result-board").classList.contains("hidden")) {
+          resolveMatch();
+        }
+      }
+    } catch (e) {
+      console.error("watchRoom error:", e);
+      showToast("Error: " + e.message, "error");
     }
   });
 }
@@ -289,8 +292,8 @@ function checkTurnState() {
     const area = document.getElementById("draft-area");
     area.innerHTML = `
       <div class="waiting-container">
-        <div class="spinner"></div>
-        <div style="color: var(--slate); font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.7;">Waiting for opponent...</div>
+        <div class="beautiful-spinner"></div>
+        <div class="waiting-text">Waiting for opponent...</div>
       </div>
     `;
     
@@ -352,8 +355,8 @@ async function handleKeep() {
   const area = document.getElementById("draft-area");
   area.innerHTML = `
     <div class="waiting-container">
-      <div class="spinner"></div>
-      <div style="color: var(--slate); font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.7;">Waiting for opponent...</div>
+      <div class="beautiful-spinner"></div>
+      <div class="waiting-text">Waiting for opponent...</div>
     </div>
   `;
   
@@ -648,7 +651,6 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("btn-create-room").style.display = "none";
     document.getElementById("join-divider").style.display = "none";
     document.getElementById("join-input-group").style.display = "none";
-    document.getElementById("btn-join-room").style.display = "none";
     document.getElementById("btn-leave-room").classList.remove("hidden");
     
     startWatchingRoom();
