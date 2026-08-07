@@ -163,8 +163,21 @@ function checkTurnState() {
     // Not my turn
     clearActionButtons();
     const area = document.getElementById("draft-area");
-    area.innerHTML = `<div style="text-align:center; padding: 40px; grid-column: span 2; color: var(--slate); font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.7;">Waiting for Opponent to pick...</div>`;
-    document.getElementById("score-current-pos").textContent = "WAITING...";
+    area.innerHTML = `
+      <div class="waiting-container">
+        <div class="spinner"></div>
+        <div style="color: var(--slate); font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.7;">Waiting for opponent...</div>
+      </div>
+    `;
+    
+    const opponentData = roomState.players[roomState.turn];
+    if (opponentData && opponentData.turnIndex < DRAFT_ORDER.length) {
+      let pos = DRAFT_ORDER[opponentData.turnIndex];
+      if (pos === "Manager") pos = "MGR";
+      document.getElementById("score-current-pos").textContent = pos;
+    } else {
+      document.getElementById("score-current-pos").textContent = "---";
+    }
   }
 }
 
@@ -211,14 +224,25 @@ async function handleKeep() {
   activeCardData = null;
   clearActionButtons();
   
+  // Immediately show waiting container to feel responsive
+  const area = document.getElementById("draft-area");
+  area.innerHTML = `
+    <div class="waiting-container">
+      <div class="spinner"></div>
+      <div style="color: var(--slate); font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.1em; opacity: 0.7;">Waiting for opponent...</div>
+    </div>
+  `;
+  
   const state = getState();
+  
+  // Immediately update the squad drawer and ratings locally
+  updateTopSlots();
   
   // Submit pick to Firebase
   await online.submitPick(currentRoomCode, playerRole, currentPos, card, state.currentIndex);
   
   if (state.isComplete) {
     showToast(`${keptName} locked in. Squad complete! 🏆`, "success");
-    updateTopSlots();
     
     // If guest is also done, or host is done, check if both done
     const opponentRole = playerRole === 'host' ? 'guest' : 'host';
@@ -449,8 +473,10 @@ function setupDrawer() {
       }
     });
 
-    drawer.addEventListener("click", (e) => {
-      if (e.target === drawer) {
+    document.addEventListener("click", (e) => {
+      if (!drawer.classList.contains("drawer-closed") && 
+          !drawer.contains(e.target) && 
+          !toggleBtn.contains(e.target)) {
         drawer.classList.add("drawer-closed");
         toggleBtn.innerHTML = '<i class="fa-solid fa-list-ul"></i>';
       }

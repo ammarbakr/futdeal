@@ -252,12 +252,13 @@ body::after {
   z-index: 2000;
   box-shadow: 0 -20px 40px rgba(0,0,0,0.8);
   
-  transform: translateY(0);
-  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .bottom-drawer.drawer-closed {
-  transform: translateY(110%);
+  transform: translate3d(0, 110%, 0);
 }
 
 .drawer-content {
@@ -588,7 +589,7 @@ body::after {
   position: fixed;
   bottom: 24px;
   left: 50%;
-  transform: translate(-50%, 20px);
+  transform: translate3d(-50%, 20px, 0);
   width: calc(100% - 32px);
   max-width: 440px;
   background: var(--surface-2);
@@ -601,12 +602,13 @@ body::after {
   /* Hidden state when empty */
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  will-change: transform, opacity;
+  transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 #action-bar:not(:empty) {
   pointer-events: auto;
   opacity: 1;
-  transform: translate(-50%, 0);
+  transform: translate3d(-50%, 0, 0);
 }
 
 .action-btn {
@@ -1148,4 +1150,158 @@ body::after {
   font-size: 0.75rem;
   color: var(--text-muted);
   text-align: center;
+}
+
+/* ── Lobby & Spinner ───────────────────────────────────── */
+.lobby-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px 24px;
+  max-width: 400px;
+  margin: 0 auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  text-align: center;
+}
+
+.lobby-container h2 {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.input-group label {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--slate);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.input-group input {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input-group input:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(0, 242, 96, 0.2);
+}
+
+.lobby-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.lobby-actions .action-btn {
+  flex: 1;
+}
+
+.lobby-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: var(--slate);
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.lobby-divider::before,
+.lobby-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border);
+}
+
+.lobby-divider::before { margin-right: 12px; }
+.lobby-divider::after { margin-left: 12px; }
+
+.room-code-display {
+  margin-top: 16px;
+  padding: 16px;
+  background: rgba(0, 242, 96, 0.1);
+  border: 1px solid var(--green);
+  border-radius: var(--radius-md);
+  color: var(--text);
+}
+
+.room-code-display span {
+  font-size: 0.9rem;
+  color: var(--slate);
+}
+
+.room-code-display strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--green);
+  letter-spacing: 0.2em;
+  margin: 8px 0;
+}
+
+.room-code-display .small-text {
+  font-size: 0.8rem;
+  color: var(--slate);
+}
+
+.lobby-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.1);
+  border-top-color: var(--green);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.waiting-container {
+  grid-column: span 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  gap: 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg);
+}
+
+.waiting-container .spinner {
+  border-top-color: var(--text-muted);
 }
