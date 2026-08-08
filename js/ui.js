@@ -5,10 +5,17 @@
 import { POSITION_LABELS, RARITY_COLORS } from "./data.js";
 
 const RARITY_CLASSES = ["rarity-bronze", "rarity-silver", "rarity-gold", "rarity-elite"];
-const SLOT_STATE_CLASSES = ["team-slot--active", "team-slot--filled", "team-slot--done", "team-slot--pulse"];
 
 function rarityClass(rarity) {
   return `rarity-${rarity}`;
+}
+
+function hexToRgbString(hex) {
+  const clean = hex.replace("#", "");
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  return `${r}, ${g}, ${b}`;
 }
 
 function swapClasses(el, removeList, addList) {
@@ -150,7 +157,12 @@ export function renderChoices(cards, onFlip) {
     icon.className = "card-back-icon";
     icon.innerHTML = '<i class="fa-solid fa-futbol"></i>';
 
+    const brand = document.createElement("span");
+    brand.className = "card-back-brand";
+    brand.textContent = "FUTDEAL";
+
     logoWrap.appendChild(icon);
+    logoWrap.appendChild(brand);
     front.appendChild(logoWrap);
 
     const back = document.createElement("div");
@@ -183,36 +195,55 @@ export function lockUnflippedCards(locked) {
   });
 }
 
-export function hideCard(cardEl) {
-  cardEl.parentElement.style.display = "none";
+export function rejectCard(cardEl) {
+  cardEl.classList.add("draft-card--rejected");
 }
 
 export function flipCard(cardEl, card) {
   const back = cardEl.querySelector(".card-back");
-  const barPct = Math.round(((card.stat - 60) / 35) * 70 + 30);
   const frag = document.createDocumentFragment();
 
   const revealed = document.createElement("div");
   revealed.className = `card-revealed ${rarityClass(card.rarity)}`;
   revealed.style.setProperty("--rarity-color", RARITY_COLORS[card.rarity]);
+  revealed.style.setProperty("--rarity-color-rgb", hexToRgbString(RARITY_COLORS[card.rarity]));
+
+  const topRow = document.createElement("div");
+  topRow.className = "card-top-row";
 
   const posBadge = document.createElement("div");
   posBadge.className = "card-pos-badge";
   posBadge.textContent = card.position === "Manager" ? "MGR" : card.position;
 
+  const rarityTag = document.createElement("div");
+  rarityTag.className = "card-rarity-tag";
+  rarityTag.textContent = card.rarity;
+
+  topRow.appendChild(posBadge);
+  topRow.appendChild(rarityTag);
+
   const statBig = document.createElement("div");
   statBig.className = "card-stat-big";
   statBig.textContent = String(card.stat);
 
+  const nameRule = document.createElement("div");
+  nameRule.className = "card-name-rule";
+
   const nameEl = document.createElement("div");
   nameEl.className = "card-name";
   nameEl.textContent = card.name;
+  nameRule.appendChild(nameEl);
 
-  revealed.appendChild(posBadge);
+  revealed.appendChild(topRow);
   revealed.appendChild(statBig);
-  revealed.appendChild(nameEl);
+  revealed.appendChild(nameRule);
+
+  const stamp = document.createElement("div");
+  stamp.className = "card-rejected-stamp";
+  stamp.innerHTML = "<span>Passed</span>";
 
   frag.appendChild(revealed);
+  frag.appendChild(stamp);
   back.replaceChildren(frag);
 
   cardEl.classList.remove("draft-card--facedown");
@@ -241,12 +272,6 @@ export function showActionButtons(container, onKeep, onIgnore, ignoreDisabled) {
 
 export function clearActionButtons() {
   document.getElementById("action-bar").innerHTML = "";
-}
-
-export function highlightActiveSlot(index) {
-  document.querySelectorAll(".team-slot").forEach((el, i) => {
-    el.classList.toggle("team-slot--pulse", i === index);
-  });
 }
 
 export function showToast(message, type = "info") {
@@ -303,20 +328,21 @@ export function showMatchScreen(playerTeam, playerAvg, opponentTeam, opponentAvg
     const posLabel = pos === "Manager" ? "MGR" : pos;
     const pWins = pCard.stat > oCard.stat;
     const oWins = oCard.stat > pCard.stat;
-    
-    // Normalize rarity name to match CSS vars (e.g. gold -> gold-r)
-    const pColorVar = pCard.rarity === 'gold' ? 'gold-r' : pCard.rarity;
-    const oColorVar = oCard.rarity === 'gold' ? 'gold-r' : oCard.rarity;
+
+    const pColor = RARITY_COLORS[pCard.rarity];
+    const oColor = RARITY_COLORS[oCard.rarity];
 
     return `
       <div class="h2h-row">
         <div class="h2h-player ${pWins ? 'h2h-winner' : (oWins ? 'h2h-loser' : '')}">
           <span class="h2h-name">${pCard.name.split(" ").pop()}</span>
-          <span class="h2h-stat" style="color:var(--${pColorVar})">${pCard.stat}</span>
+          <span class="h2h-stat">${pCard.stat}</span>
+          <span class="h2h-rarity-dot" style="--rarity-color:${pColor}"></span>
         </div>
         <div class="h2h-pos-badge">${posLabel}</div>
         <div class="h2h-opponent ${oWins ? 'h2h-winner' : (pWins ? 'h2h-loser' : '')}">
-          <span class="h2h-stat" style="color:var(--${oColorVar})">${oCard.stat}</span>
+          <span class="h2h-rarity-dot" style="--rarity-color:${oColor}"></span>
+          <span class="h2h-stat">${oCard.stat}</span>
           <span class="h2h-name">${oCard.name.split(" ").pop()}</span>
         </div>
       </div>
@@ -325,9 +351,8 @@ export function showMatchScreen(playerTeam, playerAvg, opponentTeam, opponentAvg
 
   const tacticContainer = document.getElementById("tactic-buttons-container");
   tacticContainer.innerHTML = tactics.map(t => {
-    let colorClass = t === 'Attack' ? 'tactic-attack' : (t === 'Possession' ? 'tactic-possession' : 'tactic-defend');
     return `
-      <button id="tactic-${t.toLowerCase()}" class="tactic-btn ${colorClass}" data-tactic="${t}">
+      <button id="tactic-${t.toLowerCase()}" class="tactic-btn" data-tactic="${t}">
         ${tacticLabels[t]}
       </button>
     `;
@@ -338,23 +363,79 @@ export function showMatchScreen(playerTeam, playerAvg, opponentTeam, opponentAvg
   });
 }
 
-export function showResultScreen(result, onPlayAgain) {
+function animateScoreCount(el, to, duration = 650) {
+  const start = performance.now();
+  function tick(now) {
+    const p = Math.min(1, (now - start) / duration);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(eased * to);
+    if (p < 1) requestAnimationFrame(tick);
+    else el.textContent = to;
+  }
+  requestAnimationFrame(tick);
+}
+
+function buildResultFx(outcome) {
+  const fx = document.getElementById("result-fx");
+  if (!fx) return;
+  fx.innerHTML = "";
+
+  if (outcome === "draw") return;
+
+  const ring = document.createElement("div");
+  ring.className = outcome === "win" ? "result-fx-ring" : "result-fx-ring result-fx-ring--loss";
+  fx.appendChild(ring);
+
+  if (outcome === "win") {
+    const colors = ["var(--paper-0)", "var(--paper-2)", "var(--signal-bright)"];
+    for (let i = 0; i < 16; i++) {
+      const shard = document.createElement("span");
+      shard.className = "result-shard";
+      const left = Math.random() * 100;
+      const delay = Math.random() * 0.35;
+      const dur = 1.1 + Math.random() * 0.6;
+      const rot = Math.round(Math.random() * 360);
+      const drift = Math.round((Math.random() - 0.5) * 70);
+      shard.style.cssText = `left:${left}%; background:${colors[i % colors.length]}; animation-delay:${delay}s; animation-duration:${dur}s; --rot:${rot}deg; --drift:${drift}px;`;
+      fx.appendChild(shard);
+    }
+  } else {
+    const flash = document.createElement("div");
+    flash.className = "result-fx-flash";
+    fx.appendChild(flash);
+  }
+}
+
+export function showResultScreen(result, onPlayAgain, isHost) {
   switchScreen("result-board");
-  
+
   const { playerScore, opponentScore, playerAdj, opponentAdj, boost, playerTactic, opponentTactic, tacticLabels } = result;
-  
+
   const playerWon = playerScore > opponentScore;
   const isDraw = playerScore === opponentScore;
+  const outcome = isDraw ? "draw" : playerWon ? "win" : "loss";
 
   const outcomeEl = document.getElementById("result-outcome");
   outcomeEl.innerHTML = isDraw ? "Draw" : playerWon ? '<i class="fa-solid fa-trophy" style="margin-right:6px;"></i> Victory!' : "Defeat";
+  // Reset + reflow so the entrance animation replays even if the previous
+  // match ended in the exact same outcome (className alone won't restart it).
+  outcomeEl.className = "";
+  void outcomeEl.offsetWidth;
   outcomeEl.className = `result-outcome ${isDraw ? "result-outcome--draw" : playerWon ? "result-outcome--win" : "result-outcome--loss"}`;
 
-  document.getElementById("result-score-player").textContent = playerScore;
-  document.getElementById("result-score-player").className = `result-score-you ${playerWon ? "result-score--winner" : ""}`;
-  
-  document.getElementById("result-score-opponent").textContent = opponentScore;
-  document.getElementById("result-score-opponent").className = `result-score-opp ${!playerWon && !isDraw ? "result-score--winner" : ""}`;
+  const contentEl = document.querySelector(".result-screen-content");
+  contentEl.classList.remove("result-shake");
+  void contentEl.offsetWidth;
+  if (outcome === "loss") contentEl.classList.add("result-shake");
+
+  buildResultFx(outcome);
+
+  const playerScoreEl = document.getElementById("result-score-player");
+  const opponentScoreEl = document.getElementById("result-score-opponent");
+  playerScoreEl.className = `result-score-you ${playerWon ? "result-score--winner" : ""}`;
+  opponentScoreEl.className = `result-score-opp ${!playerWon && !isDraw ? "result-score--winner" : ""}`;
+  animateScoreCount(playerScoreEl, playerScore);
+  animateScoreCount(opponentScoreEl, opponentScore);
 
   document.getElementById("result-player-tactic").innerHTML = tacticLabels[playerTactic];
   document.getElementById("result-player-ovr").innerHTML = `${playerAdj}<small>${boost === "player" ? " (+10% tactic boost)" : ""}</small>`;
@@ -366,6 +447,17 @@ export function showResultScreen(result, onPlayAgain) {
   const oldBtn = document.getElementById("btn-restart");
   const newBtn = oldBtn.cloneNode(true);
   oldBtn.parentNode.replaceChild(newBtn, oldBtn);
+
+  // Only the host can actually restart the room — the button must say so,
+  // instead of showing an identical "Draft Again" CTA for both roles.
+  if (isHost) {
+    newBtn.className = "action-btn action-btn--keep btn-restart";
+    newBtn.innerHTML = '<i class="fa-solid fa-rotate-right" style="margin-right: 6px;"></i> Draft Again';
+  } else {
+    newBtn.className = "lobby-btn lobby-btn-secondary btn-restart";
+    newBtn.innerHTML = '<i class="fa-solid fa-hourglass-half" style="margin-right: 6px;"></i> Waiting for Host…';
+  }
+
   newBtn.addEventListener("click", onPlayAgain);
 }
 

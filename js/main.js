@@ -19,9 +19,8 @@ import {
   flipCard,
   showActionButtons,
   clearActionButtons,
-  highlightActiveSlot,
   lockUnflippedCards,
-  hideCard,
+  rejectCard,
   showDraftBoard,
   showMatchScreen,
   showResultScreen,
@@ -31,7 +30,7 @@ import {
   showConfirmModal,
 } from "./ui.js";
 
-import { DRAFT_ORDER, POSITION_LABELS } from "./data.js";
+import { DRAFT_ORDER } from "./data.js";
 import { TACTICS, TACTIC_LABELS, simulateMatch } from "./match.js";
 import * as online from "./online.js";
 
@@ -45,6 +44,61 @@ let currentRoomCode = null;
 let playerRole = null; // 'host' or 'guest'
 let roomState = null;
 let unsubscribeRoom = null;
+
+/**
+ * Marks a room abandoned (so anyone still connected gets notified) and
+ * then deletes it, instead of leaving it sitting in the database forever.
+ */
+async function closeRoom(code) {
+  if (!code) return;
+  try {
+    await online.setStatus(code, 'abandoned');
+    await online.deleteRoom(code);
+  } catch (e) {
+    console.error("Failed to close room:", e);
+  }
+}
+
+/**
+ * Common "give up on this room and go home" path — used by Cancel (lobby),
+ * Leave Room, and as the escape hatch on the post-match waiting modals.
+ */
+async function leaveAndReload() {
+  if (unsubscribeRoom) unsubscribeRoom();
+  await closeRoom(currentRoomCode);
+  sessionStorage.removeItem('futdeal_roomCode');
+  sessionStorage.removeItem('futdeal_playerRole');
+  window.location.reload();
+}
+
+/**
+ * Renders the room code as individually-animated letter cells (instead of
+ * a plain text string) so it stamps in one character at a time.
+ */
+function renderRoomCode(code) {
+  const codeEl = document.getElementById("display-code");
+  codeEl.innerHTML = "";
+  code.split("").forEach((ch, i) => {
+    const span = document.createElement("span");
+    span.className = "code-letter";
+    span.style.animationDelay = `${0.15 + i * 0.09}s`;
+    span.textContent = ch;
+    codeEl.appendChild(span);
+  });
+}
+
+/**
+ * Hides every "choose an action" element in the lobby (the OR divider,
+ * the room-code entry, and the instructional subtitle). Kept as one
+ * function so every place that leaves the lobby's "create/join" step
+ * hides the whole cluster together instead of listing elements by hand.
+ */
+function hideJoinSection() {
+  document.getElementById("join-divider").style.display = "none";
+  document.getElementById("join-input-group").style.display = "none";
+  document.getElementById("code-input-label").style.display = "none";
+  document.getElementById("lobby-subtitle").style.display = "none";
+}
 
 /**
  * Lobby UI Logic
@@ -80,13 +134,7 @@ function initLobby() {
     nicknameModal.classList.add("hidden");
   });
 
-  document.getElementById("btn-cancel-lobby").addEventListener("click", async () => {
-    if (unsubscribeRoom) unsubscribeRoom();
-    if (currentRoomCode) await online.setStatus(currentRoomCode, 'abandoned');
-    sessionStorage.removeItem('futdeal_roomCode');
-    sessionStorage.removeItem('futdeal_playerRole');
-    window.location.reload();
-  });
+  document.getElementById("btn-cancel-lobby").addEventListener("click", leaveAndReload);
 
   document.getElementById("btn-create-room").addEventListener("click", async () => {
     const name = localStorage.getItem('futdeal_username');
@@ -108,18 +156,19 @@ function initLobby() {
       sessionStorage.setItem('futdeal_playerName', name);
       document.getElementById("score-you-name").textContent = name;
       
-      document.getElementById("display-code").textContent = currentRoomCode;
+      renderRoomCode(currentRoomCode);
       document.getElementById("room-code-display").classList.remove("hidden");
-      
-      // Hide the join section
-      document.getElementById("join-divider").style.display = "none";
-      document.getElementById("join-input-group").style.display = "none";
-      
+
+      hideJoinSection();
+
       document.getElementById("btn-cancel-lobby").classList.remove("hidden");
       
       startWatchingRoom();
     } catch (e) {
       showToast("Failed to create room: " + e.message, "error");
+      btnCreate.innerHTML = '<i class="fa-solid fa-plus"></i> Create Room';
+      btnCreate.style.pointerEvents = "";
+      btnCreate.style.opacity = "";
     }
   });
   const codeInputs = document.querySelectorAll(".code-char");
@@ -274,11 +323,38 @@ function startWatchingRoom() {
   });
 }
 
+/**
+ * Highlights whichever scoreboard side currently has the turn, using the
+ * single claret signal accent — the only visual cue for "who's up" now
+ * that the mid-draft toasts are gone.
+ */
+function updateTurnIndicator() {
+  const leftEl = document.querySelector('.score-left');
+  const rightEl = document.querySelector('.score-right');
+  if (!leftEl || !rightEl) return;
+
+  if (!roomState || roomState.status !== 'drafting') {
+    leftEl.classList.remove('score-side--active');
+    rightEl.classList.remove('score-side--active');
+    return;
+  }
+
+  const myDone = getState().isComplete;
+  const oppRole = playerRole === 'host' ? 'guest' : 'host';
+  const oppData = roomState.players[oppRole];
+  const oppDone = !!(oppData && oppData.turnIndex >= DRAFT_ORDER.length);
+
+  leftEl.classList.toggle('score-side--active', roomState.turn === playerRole && !myDone);
+  rightEl.classList.toggle('score-side--active', roomState.turn === oppRole && !oppDone);
+}
+
 function checkTurnState() {
   if (!roomState || roomState.status !== 'drafting') return;
-  
+
+  updateTurnIndicator();
+
   const isMyTurn = roomState.turn === playerRole;
-  
+
   if (isMyTurn) {
     // If I haven't completed my draft, start a round
     const state = getState();
@@ -326,7 +402,6 @@ function updateTopSlots() {
   });
 
   if (!state.isComplete) {
-    highlightActiveSlot(state.currentIndex);
     let pos = DRAFT_ORDER[state.currentIndex];
     if (pos === "Manager") pos = "MGR";
     document.getElementById("score-current-pos").textContent = pos;
@@ -340,8 +415,7 @@ function updateTopSlots() {
  */
 async function handleKeep() {
   if (!activeCardData) return;
-  
-  const keptName = activeCardData.name.split(" ").pop();
+
   const card = activeCardData;
   const currentPos = DRAFT_ORDER[getState().currentIndex];
   
@@ -369,18 +443,14 @@ async function handleKeep() {
   await online.submitPick(currentRoomCode, playerRole, currentPos, card, state.currentIndex);
   
   if (state.isComplete) {
-    showToast(`${keptName} locked in. Squad complete! 🏆`, "success");
-    
     // If guest is also done, or host is done, check if both done
     const opponentRole = playerRole === 'host' ? 'guest' : 'host';
     if (roomState.players[opponentRole].turnIndex === 5) {
       // Both done
       await online.setStatus(currentRoomCode, 'matching');
     }
-  } else {
-    showToast(`${keptName} locked in.`, "success");
-    // Round over, wait for other player (submitPick passed the turn)
   }
+  // Round over, wait for other player (submitPick passed the turn)
 }
 
 /**
@@ -390,15 +460,13 @@ function handleIgnore() {
   if (!activeCardEl) return;
   
   ignoreCard();
-  hideCard(activeCardEl);
+  rejectCard(activeCardEl);
   clearActionButtons();
   
   lockUnflippedCards(false);
-  
+
   activeCardEl = null;
   activeCardData = null;
-  
-  showToast("Card ignored. Pick your final choice.", "warn");
 }
 
 /**
@@ -419,9 +487,13 @@ function handleCardFlip(cardEl, card) {
     showActionButtons(actionBar, handleKeep, handleIgnore, state.ignoreUsedThisRound);
     
   } else if (state.interactionState === "FORCED_PICK") {
+    lockUnflippedCards(true);
+
     activeCardEl = cardEl;
     activeCardData = card;
-    setTimeout(handleKeep, 400);
+    // Give the player a real moment to actually see this card (it flips in
+    // over ~450ms) before it's auto-kept and the round moves on.
+    setTimeout(handleKeep, 1400);
   }
 }
 
@@ -431,13 +503,10 @@ function handleCardFlip(cardEl, card) {
 function startRound() {
   updateTopSlots();
   clearActionButtons();
-  
-  const { currentIndex } = getState();
+
   const { choices } = beginRound(roomState.seed, playerRole);
-  
+
   renderChoices(choices, handleCardFlip);
-  
-  showToast(`Your turn: Pick ${POSITION_LABELS[DRAFT_ORDER[currentIndex]]}`, "info");
 }
 
 /**
@@ -472,16 +541,17 @@ function transitionToMatch() {
   // Check if we already picked a tactic before reconnecting
   const myTactic = roomState.players[playerRole].tactic;
   if (myTactic) {
-    document.querySelectorAll('.tactic-btn').forEach(btn => {
-      btn.style.opacity = "0.5";
-      btn.style.pointerEvents = "none";
-    });
+    document.querySelectorAll('.tactic-btn').forEach(btn => btn.classList.add('is-dimmed'));
     const tacticBtn = document.getElementById(`tactic-${myTactic.toLowerCase()}`);
     if (tacticBtn) {
-      tacticBtn.style.opacity = "1";
-      tacticBtn.style.boxShadow = "0 0 20px rgba(255,255,255,0.5)";
+      tacticBtn.classList.remove('is-dimmed');
+      tacticBtn.classList.add('is-selected');
     }
     document.querySelector('.tactic-hint').textContent = "Waiting for opponent...";
+  } else {
+    // Fresh match (e.g. after a restart) — clear any leftover hint text
+    // from a previous match instead of leaving "Waiting for opponent...".
+    document.querySelector('.tactic-hint').textContent = "Pick a tactic to play";
   }
 }
 
@@ -490,14 +560,12 @@ function transitionToMatch() {
  */
 async function handleTacticChosen(tactic) {
   // Disable buttons visually
-  document.querySelectorAll('.tactic-btn').forEach(btn => {
-    btn.style.opacity = "0.5";
-    btn.style.pointerEvents = "none";
-  });
-  
-  document.getElementById(`tactic-${tactic.toLowerCase()}`).style.opacity = "1";
-  document.getElementById(`tactic-${tactic.toLowerCase()}`).style.boxShadow = "0 0 20px rgba(255,255,255,0.5)";
-  
+  document.querySelectorAll('.tactic-btn').forEach(btn => btn.classList.add('is-dimmed'));
+
+  const chosenBtn = document.getElementById(`tactic-${tactic.toLowerCase()}`);
+  chosenBtn.classList.remove('is-dimmed');
+  chosenBtn.classList.add('is-selected');
+
   document.querySelector('.tactic-hint').textContent = "Waiting for opponent...";
   
   await online.submitTactic(currentRoomCode, playerRole, tactic);
@@ -553,12 +621,12 @@ function resolveMatch() {
 
   showResultScreen(myResult, async () => {
     if (playerRole === 'host') {
-      showModal("Restarting room...", null);
+      showModal("Restarting room...", leaveAndReload);
       await online.restartRoom(currentRoomCode);
     } else {
-      showModal("Waiting for host to restart...", null);
+      showModal("Waiting for host to restart...", leaveAndReload);
     }
-  });
+  }, playerRole === 'host');
 }
 
 /**
@@ -596,18 +664,21 @@ function setupDrawer() {
       const isClosed = drawer.classList.contains("drawer-closed");
       if (isClosed) {
         drawer.classList.remove("drawer-closed");
+        drawer.setAttribute("aria-hidden", "false");
         toggleBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
       } else {
         drawer.classList.add("drawer-closed");
+        drawer.setAttribute("aria-hidden", "true");
         toggleBtn.innerHTML = '<i class="fa-solid fa-list-ul"></i>';
       }
     });
 
     document.addEventListener("click", (e) => {
-      if (!drawer.classList.contains("drawer-closed") && 
-          !drawer.contains(e.target) && 
+      if (!drawer.classList.contains("drawer-closed") &&
+          !drawer.contains(e.target) &&
           !toggleBtn.contains(e.target)) {
         drawer.classList.add("drawer-closed");
+        drawer.setAttribute("aria-hidden", "true");
         toggleBtn.innerHTML = '<i class="fa-solid fa-list-ul"></i>';
       }
     });
@@ -621,15 +692,7 @@ document.addEventListener("DOMContentLoaded", () => {
   
   // Setup Leave button
   document.getElementById("btn-leave-room").addEventListener("click", () => {
-    showConfirmModal("Are you sure you want to leave the room?", async () => {
-      if (unsubscribeRoom) unsubscribeRoom();
-      if (currentRoomCode) {
-        await online.setStatus(currentRoomCode, 'abandoned');
-      }
-      sessionStorage.removeItem('futdeal_roomCode');
-      sessionStorage.removeItem('futdeal_playerRole');
-      window.location.reload();
-    });
+    showConfirmModal("Are you sure you want to leave the room?", leaveAndReload);
   });
   
   // Try to restore session
@@ -649,8 +712,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     
     document.getElementById("btn-create-room").style.display = "none";
-    document.getElementById("join-divider").style.display = "none";
-    document.getElementById("join-input-group").style.display = "none";
+    hideJoinSection();
     document.getElementById("btn-leave-room").classList.remove("hidden");
     
     startWatchingRoom();

@@ -2,8 +2,6 @@
  * match.js — Match simulation engine
  */
 
-import { CARD_POOL, DRAFT_ORDER } from "./data.js";
-
 export const TACTICS = ["Attack", "Possession", "Defend"];
 
 export const TACTIC_LABELS = {
@@ -11,31 +9,6 @@ export const TACTIC_LABELS = {
   Possession: '<i class="fa-solid fa-arrows-to-eye"></i> Possession',
   Defend: '<i class="fa-solid fa-shield-halved"></i> Defend',
 };
-
-/**
- * Secretly generates a Bot opponent.
- */
-export function generateOpponent() {
-  const team = {};
-  let totalStat = 0;
-
-  DRAFT_ORDER.forEach(pos => {
-    const pool = CARD_POOL.filter(c => c.position === pos);
-    const randomCard = pool[Math.floor(Math.random() * pool.length)];
-    team[pos] = randomCard;
-    totalStat += randomCard.stat;
-  });
-
-  // Target OVR is between 70 and 90.
-  // We mock this by generating a random average and forcing it for the UI.
-  // (In a real game, we'd pick cards that perfectly match the average, but for this prototype 
-  // generating random cards and displaying a fake 70-90 average works to satisfy the requirement)
-  const avgStat = Math.floor(Math.random() * (90 - 70 + 1)) + 70;
-  
-  const tactic = TACTICS[Math.floor(Math.random() * TACTICS.length)];
-
-  return { team, avgStat, tactic };
-}
 
 /**
  * Simulates the match using RPS logic and score randomizer.

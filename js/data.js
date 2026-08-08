@@ -1,6 +1,6 @@
 /**
  * data.js — Card pool for FutDeal
- * Exactly 25 cards, 5 per position. Stats 60-95.
+ * 50 cards total, 10 per position. Stats 68-91.
  */
 
 export const CARD_POOL = [
@@ -76,8 +76,8 @@ export const POSITION_LABELS = {
 };
 
 export const RARITY_COLORS = {
-  bronze: "#cd7f32",
-  silver: "#a8a9ad",
-  gold:   "#FFD700",
-  elite:  "#00E676",
+  bronze: "#93765A",
+  silver: "#ADAAA2",
+  gold:   "#C9A24A",
+  elite:  "#4E6E93",
 };
