@@ -30,6 +30,15 @@
           <p id="lobby-subtitle">Create or join a draft challenge</p>
         </div>
 
+        <div id="mode-selector" class="mode-selector">
+          <button class="mode-btn mode-btn--active" data-mode="quick">
+            Quick Draft <span>5 picks</span>
+          </button>
+          <button class="mode-btn" data-mode="full">
+            Full Squad <span>12 picks</span>
+          </button>
+        </div>
+
         <button id="btn-create-room" class="lobby-btn lobby-btn-primary">
           <i class="fa-solid fa-plus"></i> Create Room
         </button>
@@ -196,6 +205,12 @@
         </button>
       </div>
     </div>
+  </div>
+
+  <!-- Opponent pick reveal overlay -->
+  <div id="opp-pick-overlay" class="opp-pick-overlay" aria-live="polite" aria-atomic="true">
+    <div id="opp-pick-card-slot" class="opp-pick-card-slot"></div>
+    <p id="opp-pick-label" class="opp-pick-label">Opponent picked</p>
   </div>
 
   <script type="module" src="js/main.js"></script>

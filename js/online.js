@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-app.js";
-import { getDatabase, ref, set, get, onValue, update, onDisconnect, child } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-database.js";
+import { getDatabase, ref, set, get, onValue, update, onDisconnect } from "https://www.gstatic.com/firebasejs/10.4.0/firebase-database.js";
+import { DRAFT_ORDER, DRAFT_ORDER_FULL } from "./data.js";
 
-// 🔴 IMPORTANT: Replace this with your actual Firebase project config
 export const firebaseConfig = {
   apiKey: "AIzaSyCalbjSWfCs0kkb0EdJL8YTSYlros745aM",
   authDomain: "futdeal-f4131.firebaseapp.com",
@@ -22,6 +22,11 @@ try {
   console.error("Firebase initialization failed (check your config):", e);
 }
 
+function emptyTeam(mode) {
+  const order = mode === 'full' ? DRAFT_ORDER_FULL : DRAFT_ORDER;
+  return Object.fromEntries(order.map(key => [key, null]));
+}
+
 export function generateRoomCode() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   let result = '';
@@ -31,18 +36,19 @@ export function generateRoomCode() {
   return result;
 }
 
-export async function createRoom(playerName) {
+export async function createRoom(playerName, mode = 'quick') {
   const code = generateRoomCode();
   const roomRef = ref(db, `rooms/${code}`);
 
   await set(roomRef, {
     status: 'waiting',
-    seed: Math.floor(Math.random() * 1000000), // Random seed to generate same random outcomes
-    turn: 'host', // 'host' or 'guest'
+    mode,
+    seed: Math.floor(Math.random() * 1000000),
+    turn: 'host',
     players: {
-      host: { 
-        name: playerName, 
-        team: {GK:null, DF:null, MF:null, AT:null, Manager:null}, 
+      host: {
+        name: playerName,
+        team: emptyTeam(mode),
         turnIndex: 0,
         connected: true,
         tactic: null
@@ -50,9 +56,7 @@ export async function createRoom(playerName) {
     }
   });
 
-  // Handle disconnect
   onDisconnect(ref(db, `rooms/${code}/players/host/connected`)).set(false);
-
   return code;
 }
 
@@ -60,21 +64,19 @@ export async function joinRoom(code, playerName) {
   const roomRef = ref(db, `rooms/${code}`);
   const snapshot = await get(roomRef);
 
-  if (!snapshot.exists()) {
-    throw new Error('Room not found');
-  }
+  if (!snapshot.exists()) throw new Error('Room not found');
 
   const data = snapshot.val();
-  if (data.status !== 'waiting') {
-    throw new Error('Room is full or already started');
-  }
+  if (data.status !== 'waiting') throw new Error('Room is full or already started');
+
+  const mode = data.mode || 'quick';
 
   await update(roomRef, {
     status: 'drafting',
-    turn: 'host', // host goes first
-    'players/guest': { 
-      name: playerName, 
-      team: {GK:null, DF:null, MF:null, AT:null, Manager:null}, 
+    turn: 'host',
+    'players/guest': {
+      name: playerName,
+      team: emptyTeam(mode),
       turnIndex: 0,
       connected: true,
       tactic: null
@@ -93,16 +95,12 @@ export function watchRoom(code, callback) {
   return unsubscribe;
 }
 
-export async function submitPick(code, role, position, card, newTurnIndex) {
+export async function submitPick(code, role, slotKey, card, newTurnIndex) {
   const roomRef = ref(db, `rooms/${code}`);
   const updates = {};
-  updates[`players/${role}/team/${position}`] = card;
+  updates[`players/${role}/team/${slotKey}`] = card;
   updates[`players/${role}/turnIndex`] = newTurnIndex;
-
-  // Pass turn to the other player if they haven't finished, or keep it if they have.
-  // Actually, turn logic can be simple: toggle to the other person.
   updates['turn'] = role === 'host' ? 'guest' : 'host';
-
   await update(roomRef, updates);
 }
 
@@ -116,14 +114,18 @@ export async function deleteRoom(code) {
 
 export async function restartRoom(code) {
   const roomRef = ref(db, `rooms/${code}`);
+  const snapshot = await get(roomRef);
+  const mode = snapshot.exists() ? (snapshot.val().mode || 'quick') : 'quick';
+
+  const team = emptyTeam(mode);
   const updates = {
     status: 'drafting',
     seed: Math.floor(Math.random() * 1000000),
     turn: 'host',
-    'players/host/team': {GK:null, DF:null, MF:null, AT:null, Manager:null},
+    'players/host/team': team,
     'players/host/turnIndex': 0,
     'players/host/tactic': null,
-    'players/guest/team': {GK:null, DF:null, MF:null, AT:null, Manager:null},
+    'players/guest/team': team,
     'players/guest/turnIndex': 0,
     'players/guest/tactic': null,
   };
@@ -134,7 +136,6 @@ export async function submitTactic(code, role, tactic) {
   await update(ref(db, `rooms/${code}/players/${role}`), { tactic });
 }
 
-// Simple seeded random to keep choices consistent
 export function seededRandom(seed) {
   let x = Math.sin(seed++) * 10000;
   return x - Math.floor(x);

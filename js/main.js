@@ -24,13 +24,14 @@ import {
   showDraftBoard,
   showMatchScreen,
   showResultScreen,
+  showOpponentPick,
   showToast,
   showModal,
   hideModal,
   showConfirmModal,
 } from "./ui.js";
 
-import { DRAFT_ORDER } from "./data.js";
+import { DRAFT_ORDER, DRAFT_ORDER_FULL, SLOT_POSITION } from "./data.js";
 import { TACTICS, TACTIC_LABELS, simulateMatch } from "./match.js";
 import * as online from "./online.js";
 
@@ -45,9 +46,19 @@ let playerRole = null; // 'host' or 'guest'
 let roomState = null;
 let unsubscribeRoom = null;
 
+// Overlay state — blocks round start while showing opponent's card
+let overlayShowing = false;
+
+// Mode
+let currentMode = 'quick';
+let activeDraftOrder = DRAFT_ORDER;
+
+function getDraftOrder(mode) {
+  return mode === 'full' ? DRAFT_ORDER_FULL : DRAFT_ORDER;
+}
+
 /**
- * Marks a room abandoned (so anyone still connected gets notified) and
- * then deletes it, instead of leaving it sitting in the database forever.
+ * Marks a room abandoned then deletes it.
  */
 async function closeRoom(code) {
   if (!code) return;
@@ -60,20 +71,19 @@ async function closeRoom(code) {
 }
 
 /**
- * Common "give up on this room and go home" path — used by Cancel (lobby),
- * Leave Room, and as the escape hatch on the post-match waiting modals.
+ * Common exit path — cancel, leave, or post-match escape.
  */
 async function leaveAndReload() {
   if (unsubscribeRoom) unsubscribeRoom();
   await closeRoom(currentRoomCode);
   sessionStorage.removeItem('futdeal_roomCode');
   sessionStorage.removeItem('futdeal_playerRole');
+  sessionStorage.removeItem('futdeal_mode');
   window.location.reload();
 }
 
 /**
- * Renders the room code as individually-animated letter cells (instead of
- * a plain text string) so it stamps in one character at a time.
+ * Renders the room code as individually-animated letter cells.
  */
 function renderRoomCode(code) {
   const codeEl = document.getElementById("display-code");
@@ -88,16 +98,26 @@ function renderRoomCode(code) {
 }
 
 /**
- * Hides every "choose an action" element in the lobby (the OR divider,
- * the room-code entry, and the instructional subtitle). Kept as one
- * function so every place that leaves the lobby's "create/join" step
- * hides the whole cluster together instead of listing elements by hand.
+ * Hides the lobby's create/join UI cluster once a room has been created.
  */
 function hideJoinSection() {
   document.getElementById("join-divider").style.display = "none";
   document.getElementById("join-input-group").style.display = "none";
   document.getElementById("code-input-label").style.display = "none";
   document.getElementById("lobby-subtitle").style.display = "none";
+  document.getElementById("mode-selector").style.display = "none";
+}
+
+/**
+ * Initialises the scoreboard progress dots for the current draft length.
+ */
+function initScoreDots(count) {
+  ['score-you-dots', 'score-opp-dots'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.className = `score-dots${count > 5 ? ' score-dots--full' : ''}`;
+    el.innerHTML = Array(count).fill('<div class="dot"></div>').join('');
+  });
 }
 
 /**
@@ -134,6 +154,16 @@ function initLobby() {
     nicknameModal.classList.add("hidden");
   });
 
+  // Mode selector
+  document.querySelectorAll(".mode-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("mode-btn--active"));
+      btn.classList.add("mode-btn--active");
+      currentMode = btn.dataset.mode;
+      activeDraftOrder = getDraftOrder(currentMode);
+    });
+  });
+
   document.getElementById("btn-cancel-lobby").addEventListener("click", leaveAndReload);
 
   document.getElementById("btn-create-room").addEventListener("click", async () => {
@@ -142,27 +172,27 @@ function initLobby() {
       nicknameModal.classList.remove("hidden");
       return showToast("Enter your nickname first", "warn");
     }
-    
+
     const btnCreate = document.getElementById("btn-create-room");
     btnCreate.innerHTML = '<div class="beautiful-spinner beautiful-spinner--sm"></div> Waiting for opponent...';
     btnCreate.style.pointerEvents = "none";
     btnCreate.style.opacity = "0.8";
     try {
-      currentRoomCode = await online.createRoom(name);
+      currentRoomCode = await online.createRoom(name, currentMode);
       playerRole = 'host';
-      
+
       sessionStorage.setItem('futdeal_roomCode', currentRoomCode);
       sessionStorage.setItem('futdeal_playerRole', playerRole);
       sessionStorage.setItem('futdeal_playerName', name);
+      sessionStorage.setItem('futdeal_mode', currentMode);
       document.getElementById("score-you-name").textContent = name;
-      
+
       renderRoomCode(currentRoomCode);
       document.getElementById("room-code-display").classList.remove("hidden");
 
       hideJoinSection();
-
       document.getElementById("btn-cancel-lobby").classList.remove("hidden");
-      
+
       startWatchingRoom();
     } catch (e) {
       showToast("Failed to create room: " + e.message, "error");
@@ -171,6 +201,7 @@ function initLobby() {
       btnCreate.style.opacity = "";
     }
   });
+
   const codeInputs = document.querySelectorAll(".code-char");
 
   codeInputs.forEach((input, index) => {
@@ -219,31 +250,29 @@ function initLobby() {
       return showToast("Enter your nickname first", "warn");
     }
     if (!code) return showToast("Enter room code", "warn");
-    
+
     const clearCodeInputs = () => {
       codeInputs.forEach(i => i.value = "");
       codeInputs[0].focus();
     };
-    
+
     try {
       await online.joinRoom(code, name);
       clearCodeInputs();
       currentRoomCode = code;
       playerRole = 'guest';
-      
+
       sessionStorage.setItem('futdeal_roomCode', currentRoomCode);
       sessionStorage.setItem('futdeal_playerRole', playerRole);
       sessionStorage.setItem('futdeal_playerName', name);
       document.getElementById("score-you-name").textContent = name;
-      
+
       showModal("Joining...", () => {
         sessionStorage.removeItem('futdeal_roomCode');
         sessionStorage.removeItem('futdeal_playerRole');
         window.location.reload();
       });
-      
 
-      
       startWatchingRoom();
     } catch (e) {
       showToast("Failed to join room: " + e.message, "error");
@@ -264,7 +293,7 @@ function startWatchingRoom() {
         setTimeout(() => window.location.reload(), 2500);
         return;
       }
-      
+
       if (state.status === 'abandoned') {
         showToast("The other player has left the game.", "error");
         sessionStorage.removeItem('futdeal_roomCode');
@@ -272,10 +301,45 @@ function startWatchingRoom() {
         setTimeout(() => window.location.reload(), 2500);
         return;
       }
-      
+
       const prevState = roomState;
       roomState = state;
-      
+
+      // Show what the opponent just picked before starting our round
+      const _oppRole = playerRole === 'host' ? 'guest' : 'host';
+      const prevOppIdx = prevState?.players?.[_oppRole]?.turnIndex ?? -1;
+      const newOppIdx  = state.players?.[_oppRole]?.turnIndex ?? 0;
+      if (
+        state.status === 'drafting' &&
+        prevOppIdx >= 0 &&
+        newOppIdx > prevOppIdx &&
+        state.turn === playerRole &&
+        !overlayShowing
+      ) {
+        const slotKey = activeDraftOrder[newOppIdx - 1];
+        const pickedCard = state.players[_oppRole]?.team?.[slotKey];
+        if (pickedCard) {
+          overlayShowing = true;
+          showOpponentPick(pickedCard, state.players[_oppRole]?.name, () => {
+            overlayShowing = false;
+            if (roomState?.status === 'drafting' && roomState?.turn === playerRole) {
+              const gs = getState();
+              if (!gs.isComplete && !activeCardEl && document.getElementById("action-bar").children.length === 0) {
+                startRound();
+              }
+            }
+          });
+          return; // don't run checkTurnState yet — overlay will trigger startRound
+        }
+      }
+
+      // Sync mode from room (important for the guest and for reconnects)
+      if (state.mode && state.mode !== currentMode) {
+        currentMode = state.mode;
+        activeDraftOrder = getDraftOrder(currentMode);
+        sessionStorage.setItem('futdeal_mode', currentMode);
+      }
+
       // Update opponent live stats
       const oppRole = playerRole === 'host' ? 'guest' : 'host';
       const oppData = state.players[oppRole];
@@ -284,10 +348,10 @@ function startWatchingRoom() {
           document.getElementById("score-opp-name").textContent = oppData.name;
         }
         const draftedCards = Object.values(oppData.team || {}).filter(c => c !== null);
-        const oppAvg = draftedCards.length > 0 
-          ? Math.round(draftedCards.reduce((sum, c) => sum + c.stat, 0) / draftedCards.length) 
+        const oppAvg = draftedCards.length > 0
+          ? Math.round(draftedCards.reduce((sum, c) => sum + c.stat, 0) / draftedCards.length)
           : 0;
-        
+
         document.getElementById("score-opp-ovr").textContent = oppAvg > 0 ? oppAvg : "--";
         const oppDots = document.getElementById("score-opp-dots").querySelectorAll(".dot");
         oppDots.forEach((dot, i) => {
@@ -295,22 +359,20 @@ function startWatchingRoom() {
           else dot.classList.remove("filled");
         });
       }
-      
-      // First time we transition to drafting, or if we just reconnected to an already drafting room, or restarted
+
       if (state.status === 'drafting' && (!prevState || prevState.status === 'waiting' || prevState.status === 'finished' || prevState.status === 'matching' || (prevState && !document.getElementById("lobby-board").classList.contains("hidden")))) {
         hideModal();
         startGame();
       }
-      
+
       if (state.status === 'drafting') {
         checkTurnState();
       }
-      
+
       if (state.status === 'matching' && (!prevState || prevState.status === 'drafting' || (prevState && !document.getElementById("lobby-board").classList.contains("hidden")))) {
         transitionToMatch();
       }
-      
-      // Check if both have picked tactics
+
       if (state.status === 'matching') {
         if (state.players.host.tactic && state.players.guest.tactic && document.getElementById("result-board").classList.contains("hidden")) {
           resolveMatch();
@@ -324,9 +386,7 @@ function startWatchingRoom() {
 }
 
 /**
- * Highlights whichever scoreboard side currently has the turn, using the
- * single claret signal accent — the only visual cue for "who's up" now
- * that the mid-draft toasts are gone.
+ * Highlights whichever scoreboard side currently has the turn.
  */
 function updateTurnIndicator() {
   const leftEl = document.querySelector('.score-left');
@@ -342,7 +402,7 @@ function updateTurnIndicator() {
   const myDone = getState().isComplete;
   const oppRole = playerRole === 'host' ? 'guest' : 'host';
   const oppData = roomState.players[oppRole];
-  const oppDone = !!(oppData && oppData.turnIndex >= DRAFT_ORDER.length);
+  const oppDone = !!(oppData && oppData.turnIndex >= activeDraftOrder.length);
 
   leftEl.classList.toggle('score-side--active', roomState.turn === playerRole && !myDone);
   rightEl.classList.toggle('score-side--active', roomState.turn === oppRole && !oppDone);
@@ -350,20 +410,18 @@ function updateTurnIndicator() {
 
 function checkTurnState() {
   if (!roomState || roomState.status !== 'drafting') return;
+  if (overlayShowing) return;
 
   updateTurnIndicator();
 
   const isMyTurn = roomState.turn === playerRole;
 
   if (isMyTurn) {
-    // If I haven't completed my draft, start a round
     const state = getState();
-    // Use .children.length === 0 instead of .innerHTML === "" to ignore whitespaces
     if (!state.isComplete && !activeCardEl && document.getElementById("action-bar").children.length === 0) {
       startRound();
     }
   } else {
-    // Not my turn
     clearActionButtons();
     const area = document.getElementById("draft-area");
     area.innerHTML = `
@@ -372,12 +430,12 @@ function checkTurnState() {
         <div class="waiting-text">Waiting for opponent...</div>
       </div>
     `;
-    
+
     const opponentData = roomState.players[roomState.turn];
-    if (opponentData && opponentData.turnIndex < DRAFT_ORDER.length) {
-      let pos = DRAFT_ORDER[opponentData.turnIndex];
-      if (pos === "Manager") pos = "MGR";
-      document.getElementById("score-current-pos").textContent = pos;
+    if (opponentData && opponentData.turnIndex < activeDraftOrder.length) {
+      const posKey = activeDraftOrder[opponentData.turnIndex];
+      const pos = SLOT_POSITION[posKey] || posKey;
+      document.getElementById("score-current-pos").textContent = pos === "Manager" ? "MGR" : pos;
     } else {
       document.getElementById("score-current-pos").textContent = "---";
     }
@@ -385,16 +443,16 @@ function checkTurnState() {
 }
 
 /**
- * Syncs the top team slots UI with the current game state.
+ * Syncs the scoreboard slots with current game state.
  */
 function updateTopSlots() {
   const state = getState();
-  renderTeamSlots(state.team, DRAFT_ORDER, state.currentIndex);
-  
+  renderTeamSlots(state.team, activeDraftOrder, state.currentIndex);
+
   const teamArray = Object.values(state.team).filter(c => c !== null);
   const myAvg = teamArray.length > 0 ? Math.round(teamArray.reduce((sum, c) => sum + c.stat, 0) / teamArray.length) : 0;
   document.getElementById("score-you-ovr").textContent = myAvg > 0 ? myAvg : "--";
-  
+
   const myDots = document.getElementById("score-you-dots").querySelectorAll(".dot");
   myDots.forEach((dot, i) => {
     if (i < state.currentIndex) dot.classList.add("filled");
@@ -402,30 +460,26 @@ function updateTopSlots() {
   });
 
   if (!state.isComplete) {
-    let pos = DRAFT_ORDER[state.currentIndex];
-    if (pos === "Manager") pos = "MGR";
-    document.getElementById("score-current-pos").textContent = pos;
+    const posKey = activeDraftOrder[state.currentIndex];
+    const pos = SLOT_POSITION[posKey] || posKey;
+    document.getElementById("score-current-pos").textContent = pos === "Manager" ? "MGR" : pos;
   } else {
     document.getElementById("score-current-pos").textContent = "READY";
   }
 }
 
-/**
- * Handles Keep action.
- */
 async function handleKeep() {
   if (!activeCardData) return;
 
   const card = activeCardData;
-  const currentPos = DRAFT_ORDER[getState().currentIndex];
-  
+  const slotKey = activeDraftOrder[getState().currentIndex];
+
   keepCard(activeCardData);
-  
+
   activeCardEl = null;
   activeCardData = null;
   clearActionButtons();
-  
-  // Immediately show waiting container to feel responsive
+
   const area = document.getElementById("draft-area");
   area.innerHTML = `
     <div class="waiting-container">
@@ -433,100 +487,75 @@ async function handleKeep() {
       <div class="waiting-text">Waiting for opponent...</div>
     </div>
   `;
-  
+
   const state = getState();
-  
-  // Immediately update the squad drawer and ratings locally
   updateTopSlots();
-  
-  // Submit pick to Firebase
-  await online.submitPick(currentRoomCode, playerRole, currentPos, card, state.currentIndex);
-  
+
+  await online.submitPick(currentRoomCode, playerRole, slotKey, card, state.currentIndex);
+
   if (state.isComplete) {
-    // If guest is also done, or host is done, check if both done
     const opponentRole = playerRole === 'host' ? 'guest' : 'host';
-    if (roomState.players[opponentRole].turnIndex === 5) {
-      // Both done
+    if (roomState.players[opponentRole].turnIndex === activeDraftOrder.length) {
       await online.setStatus(currentRoomCode, 'matching');
     }
   }
-  // Round over, wait for other player (submitPick passed the turn)
 }
 
-/**
- * Handles Ignore action.
- */
 function handleIgnore() {
   if (!activeCardEl) return;
-  
+
   ignoreCard();
   rejectCard(activeCardEl);
   clearActionButtons();
-  
   lockUnflippedCards(false);
 
   activeCardEl = null;
   activeCardData = null;
 }
 
-/**
- * Handles a card flip event.
- */
 function handleCardFlip(cardEl, card) {
   const state = getState();
-  
+
   flipCard(cardEl, card);
-  
+
   if (state.interactionState === "IDLE") {
     registerFlip();
     lockUnflippedCards(true);
-    
+
     activeCardEl = cardEl;
     activeCardData = card;
-    
+
     showActionButtons(actionBar, handleKeep, handleIgnore, state.ignoreUsedThisRound);
-    
+
   } else if (state.interactionState === "FORCED_PICK") {
     lockUnflippedCards(true);
 
     activeCardEl = cardEl;
     activeCardData = card;
-    // Give the player a real moment to actually see this card (it flips in
-    // over ~450ms) before it's auto-kept and the round moves on.
     setTimeout(handleKeep, 1400);
   }
 }
 
-/**
- * Kicks off a single drafting round.
- */
 function startRound() {
   updateTopSlots();
   clearActionButtons();
 
   const { choices } = beginRound(roomState.seed, playerRole);
-
   renderChoices(choices, handleCardFlip);
 }
 
-/**
- * Transitions from Draft to Match screen.
- */
 function transitionToMatch() {
   document.getElementById("lobby-board").classList.add("hidden");
-  
+
   const { team } = getState();
-  
-  // Calculate average
-  const playerAvg = Math.round(
-    Object.values(team).reduce((sum, c) => sum + c.stat, 0) / Object.values(team).length
-  );
-  
+
+  const playerCards = Object.values(team).filter(c => c !== null);
+  const playerAvg = Math.round(playerCards.reduce((sum, c) => sum + c.stat, 0) / playerCards.length);
+
   const opponentRole = playerRole === 'host' ? 'guest' : 'host';
   const opponentTeam = roomState.players[opponentRole].team;
-  const opponentAvg = Math.round(
-    Object.values(opponentTeam).reduce((sum, c) => sum + c.stat, 0) / Object.values(opponentTeam).length
-  );
+  const opponentCards = Object.values(opponentTeam).filter(c => c !== null);
+  const opponentAvg = Math.round(opponentCards.reduce((sum, c) => sum + c.stat, 0) / opponentCards.length);
 
   showMatchScreen(
     team,
@@ -537,8 +566,7 @@ function transitionToMatch() {
     TACTIC_LABELS,
     handleTacticChosen
   );
-  
-  // Check if we already picked a tactic before reconnecting
+
   const myTactic = roomState.players[playerRole].tactic;
   if (myTactic) {
     document.querySelectorAll('.tactic-btn').forEach(btn => btn.classList.add('is-dimmed'));
@@ -549,17 +577,11 @@ function transitionToMatch() {
     }
     document.querySelector('.tactic-hint').textContent = "Waiting for opponent...";
   } else {
-    // Fresh match (e.g. after a restart) — clear any leftover hint text
-    // from a previous match instead of leaving "Waiting for opponent...".
     document.querySelector('.tactic-hint').textContent = "Pick a tactic to play";
   }
 }
 
-/**
- * Handles tactic selection on the Match screen.
- */
 async function handleTacticChosen(tactic) {
-  // Disable buttons visually
   document.querySelectorAll('.tactic-btn').forEach(btn => btn.classList.add('is-dimmed'));
 
   const chosenBtn = document.getElementById(`tactic-${tactic.toLowerCase()}`);
@@ -567,42 +589,30 @@ async function handleTacticChosen(tactic) {
   chosenBtn.classList.add('is-selected');
 
   document.querySelector('.tactic-hint').textContent = "Waiting for opponent...";
-  
+
   await online.submitTactic(currentRoomCode, playerRole, tactic);
 }
 
 function resolveMatch() {
   const host = roomState.players.host;
   const guest = roomState.players.guest;
-  
-  const hostAvg = Math.round(
-    Object.values(host.team).reduce((sum, c) => sum + c.stat, 0) / Object.values(host.team).length
-  );
-  const guestAvg = Math.round(
-    Object.values(guest.team).reduce((sum, c) => sum + c.stat, 0) / Object.values(guest.team).length
-  );
 
-  // We use room seed so both get the same match outcome randomizer
-  // Override Math.random temporarily
+  const hostCards = Object.values(host.team).filter(c => c !== null);
+  const guestCards = Object.values(guest.team).filter(c => c !== null);
+  const hostAvg = Math.round(hostCards.reduce((sum, c) => sum + c.stat, 0) / hostCards.length);
+  const guestAvg = Math.round(guestCards.reduce((sum, c) => sum + c.stat, 0) / guestCards.length);
+
   const originalRandom = Math.random;
   let matchSeed = roomState.seed + 1000;
   Math.random = function() {
     let x = Math.sin(matchSeed++) * 10000;
     return x - Math.floor(x);
   };
-  
-  // ALWAYS simulate from the perspective of the Host
-  // This ensures the order of Math.random() calls is identical for both clients
-  const hostMatchResult = simulateMatch(
-    hostAvg,
-    guestAvg,
-    host.tactic,
-    guest.tactic
-  );
-  
+
+  const hostMatchResult = simulateMatch(hostAvg, guestAvg, host.tactic, guest.tactic);
+
   Math.random = originalRandom;
 
-  // Map result to current player's perspective
   let myResult;
   if (playerRole === 'host') {
     myResult = hostMatchResult;
@@ -629,32 +639,31 @@ function resolveMatch() {
   }, playerRole === 'host');
 }
 
-/**
- * Starts/Restarts the game and sets up Draft board.
- */
 function startGame() {
-  // Hide lobby, show draft board
   document.getElementById("lobby-board").classList.add("hidden");
   showDraftBoard();
-  
-  // Restore state from roomState (useful for reconnecting)
+
+  // Mode must be synced from roomState before this runs (done in startWatchingRoom)
+  activeDraftOrder = getDraftOrder(currentMode);
+
   const myData = roomState.players[playerRole];
   if (myData) {
-    restoreState(myData.team, myData.turnIndex);
+    restoreState(myData.team, myData.turnIndex, activeDraftOrder);
   } else {
-    resetGame();
+    resetGame(activeDraftOrder);
   }
-  
+
   activeCardEl = null;
   activeCardData = null;
-  
-  initTeamSlots(DRAFT_ORDER);
+
+  initScoreDots(activeDraftOrder.length);
+  initTeamSlots(activeDraftOrder);
   updateTopSlots();
-  
+
   checkTurnState();
 }
 
-// ─── Squad Drawer Logic ───────────────────────────────────────────────────────
+// ─── Squad Drawer ─────────────────────────────────────────────────────────────
 function setupDrawer() {
   const toggleBtn = document.getElementById("btn-toggle-squad");
   const drawer = document.getElementById("squad-drawer");
@@ -689,32 +698,38 @@ function setupDrawer() {
 document.addEventListener("DOMContentLoaded", () => {
   setupDrawer();
   initLobby();
-  
-  // Setup Leave button
+
   document.getElementById("btn-leave-room").addEventListener("click", () => {
     showConfirmModal("Are you sure you want to leave the room?", leaveAndReload);
   });
-  
+
   // Try to restore session
   const savedCode = sessionStorage.getItem('futdeal_roomCode');
   const savedRole = sessionStorage.getItem('futdeal_playerRole');
   if (savedCode && savedRole) {
     currentRoomCode = savedCode;
     playerRole = savedRole;
+
+    const savedMode = sessionStorage.getItem('futdeal_mode');
+    if (savedMode) {
+      currentMode = savedMode;
+      activeDraftOrder = getDraftOrder(currentMode);
+    }
+
     const savedName = sessionStorage.getItem('futdeal_playerName');
     if (savedName) document.getElementById("score-you-name").textContent = savedName;
-    
+
     showModal("Reconnecting...", () => {
-      // Cancel reconnection
       sessionStorage.removeItem('futdeal_roomCode');
       sessionStorage.removeItem('futdeal_playerRole');
+      sessionStorage.removeItem('futdeal_mode');
       window.location.reload();
     });
-    
+
     document.getElementById("btn-create-room").style.display = "none";
     hideJoinSection();
     document.getElementById("btn-leave-room").classList.remove("hidden");
-    
+
     startWatchingRoom();
   }
 });

@@ -67,6 +67,24 @@ export const CARD_POOL = [
 
 export const DRAFT_ORDER = ["GK", "DF", "MF", "AT", "Manager"];
 
+// 4-3-3 formation + Manager (12 picks total)
+export const DRAFT_ORDER_FULL = [
+  "GK",
+  "DF_1", "DF_2", "DF_3", "DF_4",
+  "MF_1", "MF_2", "MF_3",
+  "AT_1", "AT_2", "AT_3",
+  "Manager",
+];
+
+// Maps every slot key → its card pool position
+export const SLOT_POSITION = {
+  GK: "GK",
+  DF: "DF", DF_1: "DF", DF_2: "DF", DF_3: "DF", DF_4: "DF",
+  MF: "MF", MF_1: "MF", MF_2: "MF", MF_3: "MF",
+  AT: "AT", AT_1: "AT", AT_2: "AT", AT_3: "AT",
+  Manager: "Manager",
+};
+
 export const POSITION_LABELS = {
   GK:      "Goalkeeper",
   DF:      "Defender",

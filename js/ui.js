@@ -2,7 +2,7 @@
  * ui.js — Pure rendering functions for FutDeal
  */
 
-import { POSITION_LABELS, RARITY_COLORS } from "./data.js";
+import { POSITION_LABELS, RARITY_COLORS, SLOT_POSITION } from "./data.js";
 
 const RARITY_CLASSES = ["rarity-bronze", "rarity-silver", "rarity-gold", "rarity-elite"];
 
@@ -38,10 +38,11 @@ export function initTeamSlots(draftOrder) {
   if (!container) return;
   container.innerHTML = "";
 
-  draftOrder.forEach((pos) => {
+  draftOrder.forEach((key) => {
+    const pos = SLOT_POSITION[key] || key;
     const row = document.createElement("div");
     row.className = "squad-list-row";
-    row.id = `squad-row-${pos}`;
+    row.id = `squad-row-${key}`;
 
     const posBadge = document.createElement("div");
     posBadge.className = "squad-list-pos";
@@ -78,11 +79,11 @@ export function initTeamSlots(draftOrder) {
 export function renderTeamSlots(team, draftOrder, currentIndex) {
   let filledCount = 0;
 
-  draftOrder.forEach((pos, idx) => {
-    const row = document.getElementById(`squad-row-${pos}`);
+  draftOrder.forEach((key, idx) => {
+    const row = document.getElementById(`squad-row-${key}`);
     if (!row) return;
 
-    const card = team[pos];
+    const card = team[key];
     const isFilled = card !== null;
     const isActive = idx === currentIndex;
 
@@ -325,7 +326,8 @@ export function showMatchScreen(playerTeam, playerAvg, opponentTeam, opponentAvg
   h2hList.innerHTML = Object.keys(playerTeam).map(pos => {
     const pCard = playerTeam[pos];
     const oCard = opponentTeam[pos];
-    const posLabel = pos === "Manager" ? "MGR" : pos;
+    const rawPos = SLOT_POSITION[pos] || pos;
+    const posLabel = rawPos === "Manager" ? "MGR" : rawPos;
     const pWins = pCard.stat > oCard.stat;
     const oWins = oCard.stat > pCard.stat;
 
@@ -459,6 +461,83 @@ export function showResultScreen(result, onPlayAgain, isHost) {
   }
 
   newBtn.addEventListener("click", onPlayAgain);
+}
+
+// Builds a card element already in its revealed state — used by the opponent pick overlay.
+function buildRevealedCardEl(card) {
+  const cardEl = document.createElement("div");
+  cardEl.className = "draft-card draft-card--flipped";
+
+  const inner = document.createElement("div");
+  inner.className = "card-inner";
+
+  const front = document.createElement("div");
+  front.className = "card-face card-front";
+
+  const back = document.createElement("div");
+  back.className = "card-face card-back";
+
+  const revealed = document.createElement("div");
+  revealed.className = `card-revealed ${rarityClass(card.rarity)}`;
+  revealed.style.setProperty("--rarity-color", RARITY_COLORS[card.rarity]);
+  revealed.style.setProperty("--rarity-color-rgb", hexToRgbString(RARITY_COLORS[card.rarity]));
+
+  const topRow = document.createElement("div");
+  topRow.className = "card-top-row";
+
+  const posBadge = document.createElement("div");
+  posBadge.className = "card-pos-badge";
+  posBadge.textContent = card.position === "Manager" ? "MGR" : card.position;
+
+  const rarityTag = document.createElement("div");
+  rarityTag.className = "card-rarity-tag";
+  rarityTag.textContent = card.rarity;
+
+  topRow.appendChild(posBadge);
+  topRow.appendChild(rarityTag);
+
+  const statBig = document.createElement("div");
+  statBig.className = "card-stat-big";
+  statBig.textContent = String(card.stat);
+
+  const nameRule = document.createElement("div");
+  nameRule.className = "card-name-rule";
+  const nameEl = document.createElement("div");
+  nameEl.className = "card-name";
+  nameEl.textContent = card.name;
+  nameRule.appendChild(nameEl);
+
+  revealed.appendChild(topRow);
+  revealed.appendChild(statBig);
+  revealed.appendChild(nameRule);
+
+  back.appendChild(revealed);
+  inner.appendChild(front);
+  inner.appendChild(back);
+  cardEl.appendChild(inner);
+  return cardEl;
+}
+
+export function showOpponentPick(card, opponentName, onComplete) {
+  const overlay = document.getElementById("opp-pick-overlay");
+  const slot = document.getElementById("opp-pick-card-slot");
+  const label = document.getElementById("opp-pick-label");
+
+  if (!overlay || !slot) { onComplete?.(); return; }
+
+  slot.innerHTML = "";
+  slot.appendChild(buildRevealedCardEl(card));
+  if (label) label.textContent = `${opponentName || "Opponent"} picked`;
+
+  // Reflow-restart the animation in case the overlay was recently shown
+  overlay.classList.remove("opp-pick-overlay--active");
+  void overlay.offsetWidth;
+  overlay.classList.add("opp-pick-overlay--active");
+
+  setTimeout(() => {
+    overlay.classList.remove("opp-pick-overlay--active");
+    onComplete?.();
+  }, 2600);
 }
 
 export function showModal(message, onCancel) {
